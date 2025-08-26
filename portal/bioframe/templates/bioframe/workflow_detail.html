@@ -1,0 +1,249 @@
+{% extends 'bioframe/base.html' %}
+{% load static %}
+
+{% block title %}Workflow Details - BioFrame{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">{{ workflow.name }}</h1>
+                    <p class="mt-2 text-gray-600">{{ workflow.description }}</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="startWorkflow()" 
+                            class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                        Start Workflow
+                    </button>
+                    <a href="/dashboard/" 
+                       class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-md transition duration-200">
+                        Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Status -->
+        <div class="bg-white shadow rounded-lg p-6 mb-8">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Workflow Status</h3>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600">{{ workflow.progress|floatformat:1 }}%</div>
+                    <div class="text-sm text-gray-600">Progress</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-gray-900">{{ workflow.status|title }}</div>
+                    <div class="text-sm text-gray-600">Status</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600">{{ workflow.tools|length }}</div>
+                    <div class="text-sm text-gray-600">Total Tools</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-purple-600">{{ workflow.created_at|date:"M d, Y" }}</div>
+                    <div class="text-sm text-gray-600">Created</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Pipeline -->
+        <div class="bg-white shadow rounded-lg p-6 mb-8">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Workflow Pipeline</h3>
+            <div class="space-y-4">
+                {% for tool in workflow.tools %}
+                <div class="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg {% if tool.status == 'completed' %}bg-green-50 border-green-200{% elif tool.status == 'running' %}bg-blue-50 border-blue-200{% elif tool.status == 'failed' %}bg-red-50 border-red-200{% else %}bg-gray-50 border-gray-200{% endif %}">
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center {% if tool.status == 'completed' %}bg-green-100 text-green-600{% elif tool.status == 'running' %}bg-blue-100 text-blue-600{% elif tool.status == 'failed' %}bg-red-100 text-red-600{% else %}bg-gray-100 text-gray-600{% endif %}">
+                        {% if tool.status == 'completed' %}
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        {% elif tool.status == 'running' %}
+                            <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        {% elif tool.status == 'failed' %}
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        {% else %}
+                            <span class="text-sm font-medium">{{ tool.order }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-medium text-gray-900">{{ tool.tool_name }}</h4>
+                        <p class="text-sm text-gray-600">Step {{ tool.order }}</p>
+                        {% if tool.error_message %}
+                            <p class="text-sm text-red-600 mt-1">{{ tool.error_message }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm font-medium text-gray-900">{{ tool.status|title }}</div>
+                        {% if tool.execution_time %}
+                            <div class="text-xs text-gray-500">{{ tool.execution_time|floatformat:1 }}s</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- File Outputs -->
+        <div class="bg-white shadow rounded-lg p-6 mb-8">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">File Outputs</h3>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" id="file-outputs">
+                <!-- File outputs will be populated dynamically -->
+            </div>
+        </div>
+
+        <!-- Live Logs -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Live Logs</h3>
+                <button onclick="clearLogs()" 
+                        class="text-sm text-gray-500 hover:text-gray-700">
+                    Clear Logs
+                </button>
+            </div>
+            <div id="log-container" class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-64 overflow-y-auto">
+                <div class="text-gray-500">Logs will appear here when workflow is running...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let logContainer = document.getElementById('log-container');
+let fileOutputs = document.getElementById('file-outputs');
+
+// Start workflow
+async function startWorkflow() {
+    try {
+        const response = await fetch(`/workflows/${workflowId}/start/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        if (response.ok) {
+            addLog('Workflow started successfully', 'info');
+            startLogPolling();
+        } else {
+            addLog('Failed to start workflow', 'error');
+        }
+    } catch (error) {
+        console.error('Error starting workflow:', error);
+        addLog('Error starting workflow', 'error');
+    }
+}
+
+// Add log entry
+function addLog(message, level = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    const levelClass = {
+        'info': 'text-green-400',
+        'warning': 'text-yellow-400',
+        'error': 'text-red-400'
+    }[level] || 'text-green-400';
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = `mb-1 ${levelClass}`;
+    logEntry.innerHTML = `[${timestamp}] ${message}`;
+    
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+// Clear logs
+function clearLogs() {
+    logContainer.innerHTML = '<div class="text-gray-500">Logs cleared...</div>';
+}
+
+// Start log polling
+function startLogPolling() {
+    setInterval(async () => {
+        try {
+            const response = await fetch(`/workflows/${workflowId}/logs/`);
+            if (response.ok) {
+                const logs = await response.json();
+                logs.forEach(log => {
+                    addLog(log.message, log.level);
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+        }
+    }, 5000);
+}
+
+// Load file outputs
+async function loadFileOutputs() {
+    try {
+        const response = await fetch(`/workflows/${workflowId}/files/`);
+        if (response.ok) {
+            const files = await response.json();
+            renderFileOutputs(files);
+        }
+    } catch (error) {
+        console.error('Error loading file outputs:', error);
+    }
+}
+
+// Render file outputs
+function renderFileOutputs(files) {
+    fileOutputs.innerHTML = '';
+    
+    if (files.length === 0) {
+        fileOutputs.innerHTML = '<div class="col-span-full text-center text-gray-500">No files generated yet</div>';
+        return;
+    }
+    
+    files.forEach(file => {
+        const fileCard = document.createElement('div');
+        fileCard.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
+        
+        fileCard.innerHTML = `
+            <div class="flex items-center space-x-3">
+                <div class="flex-shrink-0">
+                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">${file.name}</p>
+                    <p class="text-sm text-gray-500">${file.size}</p>
+                    <p class="text-xs text-gray-400">${file.tool}</p>
+                </div>
+                <div class="flex-shrink-0">
+                    <a href="${file.download_url}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        Download
+                    </a>
+                </div>
+            </div>
+        `;
+        
+        fileOutputs.appendChild(fileCard);
+    });
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Extract workflow ID from URL
+    const urlParts = window.location.pathname.split('/');
+    window.workflowId = urlParts[urlParts.length - 2];
+    
+    // Load initial data
+    loadFileOutputs();
+    
+    // Start log polling if workflow is running
+    if ('{{ workflow.status }}' === 'running') {
+        startLogPolling();
+    }
+});
+</script>
+{% endblock %}
+

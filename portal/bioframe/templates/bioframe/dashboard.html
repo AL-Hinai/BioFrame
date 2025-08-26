@@ -1,0 +1,195 @@
+{% extends 'bioframe/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - BioFrame{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Welcome Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                Welcome to BioFrame, {{ user.username }}! 🧬
+            </h1>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Your comprehensive bioinformatics workflow management platform. 
+                Discover tools, create pipelines, and monitor your genomic analyses.
+            </p>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-project-diagram text-blue-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Workflows</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ stats.total_workflows }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Completed</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ stats.completed_workflows }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-spinner text-yellow-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Running</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ stats.running_workflows }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-tools text-purple-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Available Tools</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ tools_count }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Laboratory Section -->
+        <div class="mb-12">
+            <div class="bio-card rounded-xl shadow-lg p-8">
+                <h2 class="text-3xl font-bold text-gray-900 mb-6 flex items-center">
+                    <i class="fas fa-flask mr-4 text-purple-600"></i>
+                    Workflow Laboratory
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <a href="{% url 'workflow_list' %}" 
+                       class="group p-6 bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 rounded-xl transition-all duration-300 border border-purple-200 hover:shadow-lg transform hover:-translate-y-1">
+                        <div class="w-16 h-16 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                            <i class="fas fa-list text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Browse Pipelines</h4>
+                        <p class="text-gray-600">Explore existing analysis workflows and templates</p>
+                    </a>
+                    
+                    <a href="{% url 'create_workflow' %}" 
+                       class="group p-6 bg-gradient-to-r from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 rounded-xl transition-all duration-300 border border-blue-200 hover:shadow-lg transform hover:-translate-y-1">
+                        <div class="w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                            <i class="fas fa-plus text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Design Pipeline</h4>
+                        <p class="text-gray-600">Create custom bioinformatics workflows</p>
+                    </a>
+                    
+                    <a href="{% url 'tools:tool_list' %}" 
+                       class="group p-6 bg-gradient-to-r from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 rounded-xl transition-all duration-300 border border-green-200 hover:shadow-lg transform hover:-translate-y-1">
+                        <div class="w-16 h-16 bg-gradient-to-r from-green-600 to-green-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                            <i class="fas fa-tools text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Bioinformatics Tools</h4>
+                        <p class="text-gray-600">Browse available analysis tools and utilities</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Genomic Activity Timeline -->
+        <div class="bio-card rounded-xl shadow-lg p-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-6 flex items-center">
+                <i class="fas fa-chart-line mr-4 text-blue-600"></i>
+                Genomic Activity Timeline
+            </h2>
+            
+            {% if recent_activities %}
+                <div class="space-y-4">
+                    {% for activity in recent_activities %}
+                    <div class="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow duration-200">
+                        <a href="{% url 'workflow_detail' workflow_id=activity.id %}" class="block">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-10 h-10 rounded-full flex items-center justify-center 
+                                                {% if activity.status == 'completed' %}bg-green-100 text-green-600
+                                                {% elif activity.status == 'running' %}bg-blue-100 text-blue-600
+                                                {% elif activity.status == 'failed' %}bg-red-100 text-red-600
+                                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                        <i class="fas {% if activity.status == 'completed' %}fa-check
+                                                     {% elif activity.status == 'running' %}fa-spinner fa-spin
+                                                     {% elif activity.status == 'failed' %}fa-exclamation-triangle
+                                                     {% else %}fa-clock{% endif %}"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">{{ activity.name }}</h4>
+                                        <p class="text-sm text-gray-600">{{ activity.description }}</p>
+                                        <div class="flex items-center space-x-4 mt-1">
+                                            <span class="text-xs text-gray-500">
+                                                <i class="fas fa-tools mr-1"></i>
+                                                {{ activity.tools|join:", " }}
+                                            </span>
+                                            <span class="text-xs text-gray-500">
+                                                <i class="fas fa-clock mr-1"></i>
+                                                {{ activity.created_at|timesince }} ago
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm font-medium text-gray-900">{{ activity.status|title }}</span>
+                                        {% if activity.status == 'running' %}
+                                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                        {% endif %}
+                                    </div>
+                                    {% if activity.progress %}
+                                        <div class="w-24 bg-gray-200 rounded-full h-2 mt-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" style="width: {{ activity.progress }}%"></div>
+                                        </div>
+                                        <span class="text-xs text-gray-500">{{ activity.progress }}%</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-12">
+                    <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-dna text-gray-400 text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No workflows yet</h3>
+                    <p class="text-gray-600 mb-6">Get started by creating your first bioinformatics workflow</p>
+                    <a href="{% url 'create_workflow' %}" 
+                       class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
+                        <i class="fas fa-plus mr-2"></i>
+                        Create First Workflow
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- System Status -->
+        <div class="mt-8 text-center">
+            <div class="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                <i class="fas fa-check-circle mr-2"></i>
+                System Status: {{ system_status|title }}
+            </div>
+            <p class="text-sm text-gray-600 mt-2">
+                File-based workflows: {{ file_based_count }} | Database workflows: {{ db_based_count }}
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

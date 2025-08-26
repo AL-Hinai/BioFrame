@@ -1,0 +1,355 @@
+{% extends 'bioframe/base.html' %}
+{% load static %}
+
+{% block title %}Create New Workflow - BioFrame{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Create New Workflow</h1>
+            <p class="mt-2 text-gray-600">Design and configure your bioinformatics pipeline</p>
+            
+            {% if selected_template %}
+            <!-- Template Information -->
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-lightbulb text-blue-600 mr-3"></i>
+                    <div>
+                        <h3 class="text-lg font-medium text-blue-900">Using Template: {{ selected_template.name }}</h3>
+                        <p class="text-blue-700">{{ selected_template.description }}</p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            {% for tool in selected_template.tools %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {{ tool }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Workflow Creation Form -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <form method="post" id="workflow-form">
+                {% csrf_token %}
+                
+                <!-- Basic Information -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Workflow Information</h3>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="workflow_name" class="block text-sm font-medium text-gray-700">Workflow Name</label>
+                            <input type="text" name="workflow_name" id="workflow_name" required
+                                   value="{% if selected_template %}{{ selected_template.name }}{% endif %}"
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="workflow_description" class="block text-sm font-medium text-gray-700">Description</label>
+                            <input type="text" name="workflow_description" id="workflow_description" required
+                                   value="{% if selected_template %}{{ selected_template.description }}{% endif %}"
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tool Selection -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Select Tools</h3>
+                    <div class="mb-4">
+                        <div class="flex items-center space-x-4">
+                            <input type="text" id="tool-search" placeholder="Search tools..." 
+                                   class="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <select id="category-filter" class="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">All Categories</option>
+                                <option value="Quality Control">Quality Control</option>
+                                <option value="Assembly">Assembly</option>
+                                <option value="Alignment">Alignment</option>
+                                <option value="Variant Calling">Variant Calling</option>
+                                <option value="Genome Analysis">Genome Analysis</option>
+                                <option value="Quality Assessment">Quality Assessment</option>
+                                <option value="Assembly Improvement">Assembly Improvement</option>
+                                <option value="Sequence Analysis">Sequence Analysis</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" id="tools-grid">
+                        <!-- Tools will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Selected Tools Pipeline -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Workflow Pipeline</h3>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div id="pipeline-display" class="min-h-[100px] flex items-center justify-center text-gray-500">
+                            <p>Select tools to build your pipeline</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="saveAsTemplate()" 
+                            class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-md transition duration-200">
+                        <i class="fas fa-save mr-2"></i>Save as Template
+                    </button>
+                    <button type="submit" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md transition duration-200">
+                        Create Workflow
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tool Metadata Modal -->
+<div id="tool-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-title" class="text-lg font-medium text-gray-900"></h3>
+                <button onclick="closeToolModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modal-content" class="space-y-3">
+                <!-- Tool metadata will be populated here -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeToolModal()" 
+                        class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-md">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let availableTools = [];
+let selectedTools = [];
+let filteredTools = [];
+
+// Pre-selected tools from template
+const preSelectedTools = {{ pre_selected_tools|safe }};
+
+// Load available tools
+async function loadAvailableTools() {
+    try {
+        const response = await fetch('/tools/api/tools/');
+        if (response.ok) {
+            availableTools = await response.json();
+            filteredTools = [...availableTools];
+            renderToolsGrid();
+            
+            // Pre-select tools if template is selected
+            if (preSelectedTools && preSelectedTools.length > 0) {
+                preSelectedTools.forEach(toolName => {
+                    const tool = availableTools.find(t => t.name === toolName);
+                    if (tool) {
+                        selectTool(tool);
+                    }
+                });
+            }
+        } else {
+            console.error('Failed to load tools');
+        }
+    } catch (error) {
+        console.error('Error loading tools:', error);
+    }
+}
+
+// Filter tools based on search and category
+function filterTools() {
+    const searchTerm = document.getElementById('tool-search').value.toLowerCase();
+    const categoryFilter = document.getElementById('category-filter').value;
+    
+    filteredTools = availableTools.filter(tool => {
+        const matchesSearch = tool.name.toLowerCase().includes(searchTerm) || 
+                             tool.description.toLowerCase().includes(searchTerm);
+        const matchesCategory = !categoryFilter || tool.category === categoryFilter;
+        return matchesSearch && matchesCategory;
+    });
+    
+    renderToolsGrid();
+}
+
+// Render tools grid
+function renderToolsGrid() {
+    const toolsGrid = document.getElementById('tools-grid');
+    toolsGrid.innerHTML = '';
+
+    filteredTools.forEach(tool => {
+        const isSelected = selectedTools.find(t => t.name === tool.name);
+        const toolCard = document.createElement('div');
+        toolCard.className = `bg-white border rounded-lg p-4 hover:shadow-md transition duration-200 cursor-pointer ${
+            isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+        }`;
+        toolCard.onclick = () => selectTool(tool);
+        
+        toolCard.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-gray-900">${tool.name}</h4>
+                <span class="px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(tool.category)}">
+                    ${tool.category}
+                </span>
+            </div>
+            <p class="text-sm text-gray-600 mb-3">${tool.description}</p>
+            <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+                <span>v${tool.version || 'N/A'}</span>
+                <span>by ${tool.author || 'Unknown'}</span>
+            </div>
+            <div class="flex flex-wrap gap-1 mb-2">
+                ${tool.input_formats ? `<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Input: ${tool.input_formats}</span>` : ''}
+                ${tool.output_formats ? `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Output: ${tool.output_formats}</span>` : ''}
+            </div>
+            <div class="flex justify-between items-center">
+                <button onclick="showToolModal(${JSON.stringify(tool).replace(/"/g, '&quot;')})" 
+                        class="text-blue-600 hover:text-blue-800 text-xs">
+                    <i class="fas fa-info-circle mr-1"></i>Details
+                </button>
+                ${isSelected ? '<span class="text-green-600 text-xs"><i class="fas fa-check mr-1"></i>Selected</span>' : ''}
+            </div>
+        `;
+        
+        toolsGrid.appendChild(toolCard);
+    });
+}
+
+// Get category color
+function getCategoryColor(category) {
+    const colors = {
+        'Quality Control': 'bg-blue-100 text-blue-800',
+        'Assembly': 'bg-green-100 text-green-800',
+        'Alignment': 'bg-purple-100 text-purple-800',
+        'Variant Calling': 'bg-red-100 text-red-800',
+        'Genome Analysis': 'bg-teal-100 text-teal-800',
+        'Quality Assessment': 'bg-orange-100 text-orange-800',
+        'Assembly Improvement': 'bg-indigo-100 text-indigo-800',
+        'Sequence Analysis': 'bg-pink-100 text-pink-800'
+    };
+    return colors[category] || 'bg-gray-100 text-gray-800';
+}
+
+// Select tool for pipeline
+function selectTool(tool) {
+    if (!selectedTools.find(t => t.name === tool.name)) {
+        selectedTools.push({...tool, order: selectedTools.length + 1});
+        renderPipeline();
+        renderToolsGrid(); // Refresh to show selection state
+    }
+}
+
+// Remove tool from pipeline
+function removeTool(toolName) {
+    selectedTools = selectedTools.filter(t => t.name !== toolName);
+    // Reorder remaining tools
+    selectedTools.forEach((tool, index) => {
+        tool.order = index + 1;
+    });
+    renderPipeline();
+    renderToolsGrid(); // Refresh to show selection state
+}
+
+// Render pipeline display
+function renderPipeline() {
+    const pipelineDisplay = document.getElementById('pipeline-display');
+    
+    if (selectedTools.length === 0) {
+        pipelineDisplay.innerHTML = '<p class="text-gray-500">Select tools to build your pipeline</p>';
+        return;
+    }
+    
+    pipelineDisplay.innerHTML = selectedTools.map(tool => `
+        <div class="flex items-center space-x-3 mb-3">
+            <div class="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span class="text-sm font-medium text-blue-600">${tool.order}</span>
+            </div>
+            <div class="flex-1 bg-white rounded-lg p-3 border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h5 class="font-medium text-gray-900">${tool.name}</h5>
+                        <p class="text-sm text-gray-600">${tool.description}</p>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                            ${tool.input_formats ? `<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Input: ${tool.input_formats}</span>` : ''}
+                            ${tool.output_formats ? `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Output: ${tool.output_formats}</span>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="removeTool('${tool.name}')" 
+                            class="text-red-500 hover:text-red-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Show tool metadata modal
+function showToolModal(tool) {
+    const modal = document.getElementById('tool-modal');
+    const title = document.getElementById('modal-title');
+    const content = document.getElementById('modal-content');
+    
+    title.textContent = tool.name;
+    content.innerHTML = `
+        <div class="space-y-2">
+            <div><strong>Description:</strong> ${tool.description}</div>
+            <div><strong>Version:</strong> ${tool.version || 'N/A'}</div>
+            <div><strong>Author:</strong> ${tool.author || 'Unknown'}</div>
+            <div><strong>Category:</strong> ${tool.category}</div>
+            <div><strong>Input Formats:</strong> ${tool.input_formats || 'N/A'}</div>
+            <div><strong>Output Formats:</strong> ${tool.output_formats || 'N/A'}</div>
+            ${tool.url && tool.url !== '#' ? `<div><strong>URL:</strong> <a href="${tool.url}" target="_blank" class="text-blue-600 hover:underline">${tool.url}</a></div>` : ''}
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// Close tool modal
+function closeToolModal() {
+    document.getElementById('tool-modal').classList.add('hidden');
+}
+
+// Handle form submission
+document.getElementById('workflow-form').addEventListener('submit', function(e) {
+    // Don't prevent default - let the form submit normally to the current page
+    if (selectedTools.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one tool for your workflow');
+        return;
+    }
+    
+    // Add the selected tools to the form as hidden inputs
+    selectedTools.forEach((tool, index) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'selected_tools';
+        input.value = tool.name;
+        document.getElementById('workflow-form').appendChild(input);
+    });
+    
+    // Form will submit normally to the current page (/create-workflow/)
+    // The Django view will handle the POST request
+});
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadAvailableTools();
+    
+    // Add event listeners for search and filtering
+    document.getElementById('tool-search').addEventListener('input', filterTools);
+    document.getElementById('category-filter').addEventListener('change', filterTools);
+});
+</script>
+{% endblock %}

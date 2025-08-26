@@ -1,0 +1,322 @@
+{% extends 'bioframe/base.html' %}
+{% load static %}
+
+{% block title %}Initialize Workflow Run - {{ template.name }} - BioFrame{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center">
+                <a href="{% url 'workflow_list' %}" class="text-blue-600 hover:text-blue-800 mr-4">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Templates
+                </a>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Initialize Workflow Run</h1>
+                    <p class="mt-2 text-gray-600">Set up and start your {{ template.name }} workflow</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Main Form -->
+            <div class="lg:col-span-2">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-6">Run Configuration</h2>
+                    
+                    <form method="post" enctype="multipart/form-data" id="workflow-form">
+                        {% csrf_token %}
+                        
+                        <!-- Basic Information -->
+                        <div class="space-y-6">
+                            <div>
+                                <label for="run_name" class="block text-sm font-medium text-gray-700">Run Name *</label>
+                                <input type="text" name="run_name" id="run_name" required
+                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                       placeholder="e.g., My Quality Control Run">
+                                <p class="mt-1 text-sm text-gray-500">Give your workflow run a descriptive name</p>
+                            </div>
+                            
+                            <div>
+                                <label for="run_description" class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea name="run_description" id="run_description" rows="3"
+                                          class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                          placeholder="Optional description of this specific run...">{{ template.description }}</textarea>
+                            </div>
+                            
+                            <!-- Pipeline File Upload Section -->
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900 mb-4">Pipeline Input Files</h3>
+                                <p class="text-sm text-gray-600 mb-4">Upload your primary input files. Each tool's output will automatically become the input for the next tool in the pipeline.</p>
+                                
+                                <div class="space-y-6">
+                                    <!-- Primary Input Files (for first tool) -->
+                                    <div class="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
+                                        <div class="flex items-center mb-3">
+                                            <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center mr-3">
+                                                <i class="fas fa-upload text-white text-sm"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-semibold text-blue-900">Primary Input Files</h4>
+                                                <p class="text-sm text-blue-700">These files will be processed by the first tool in your pipeline</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="space-y-3">
+                                            <div>
+                                                <label class="block text-sm font-medium text-blue-800">Upload Input Files</label>
+                                                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-blue-300 border-dashed rounded-md bg-white">
+                                                    <div class="space-y-1 text-center">
+                                                        <i class="fas fa-cloud-upload-alt text-blue-400 text-3xl mb-2"></i>
+                                                        <div class="flex text-sm text-blue-600">
+                                                            <label for="primary-files" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                                                <span>Upload files</span>
+                                                                <input id="primary-files" name="primary_files" type="file" class="sr-only" multiple accept=".fastq,.fastq.gz,.fq,.fq.gz,.fasta,.fa,.fa.gz,.bam,.sam,.vcf,.gtf,.gff">
+                                                            </label>
+                                                            <p class="pl-1">or drag and drop</p>
+                                                        </div>
+                                                        <p class="text-xs text-blue-500">
+                                                            {% if template.id == 'quality-control-pipeline' or template.id == 'assembly-pipeline' or template.id == 'metagenomics-pipeline' or template.id == 'rna-seq-pipeline' %}
+                                                            FASTQ, FASTQ.GZ files
+                                                            {% elif template.id == 'variant-calling-pipeline' %}
+                                                            FASTQ, FASTQ.GZ, FASTA reference
+                                                            {% elif template.id == 'phylogenetics-pipeline' %}
+                                                            FASTA, PHYLIP files
+                                                            {% else %}
+                                                            Various formats
+                                                            {% endif %}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div id="primary-files-list" class="mt-2 space-y-1"></div>
+                                            </div>
+                                            
+                                            <div>
+                                                <label class="block text-sm font-medium text-blue-800">Additional Parameters (Optional)</label>
+                                                <textarea class="mt-1 block w-full border-blue-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                                          rows="2" placeholder="Additional parameters for the first tool..."></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Pipeline Flow Visualization -->
+                                    <div class="border border-gray-200 rounded-lg p-4">
+                                        <h4 class="font-medium text-gray-900 mb-3">Pipeline Flow</h4>
+                                        <div class="space-y-3">
+                                            {% for tool in template.tools %}
+                                            <div class="flex items-center space-x-3">
+                                                <div class="flex-shrink-0 w-8 h-8 {% if forloop.first %}bg-green-600{% elif forloop.last %}bg-purple-600{% else %}bg-blue-600{% endif %} rounded-full flex items-center justify-center">
+                                                    <span class="text-sm font-medium text-white">{{ forloop.counter }}</span>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <h5 class="font-medium text-gray-900">{{ tool|title }}</h5>
+                                                    <p class="text-sm text-gray-500">
+                                                        {% if forloop.first %}
+                                                        <span class="text-green-600 font-medium">Primary Input</span> → Processes uploaded files
+                                                        {% elif forloop.last %}
+                                                        <span class="text-purple-600 font-medium">Final Output</span> → Generates final results
+                                                        {% else %}
+                                                        <span class="text-blue-600 font-medium">Pipeline Step</span> → Uses output from previous tool
+                                                        {% endif %}
+                                                    </p>
+                                                </div>
+                                                {% if not forloop.last %}
+                                                <div class="flex-shrink-0">
+                                                    <i class="fas fa-arrow-right text-gray-400"></i>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Reference Files (if needed) -->
+                                    {% if template.id == 'variant-calling-pipeline' or template.id == 'rna-seq-pipeline' %}
+                                    <div class="border border-gray-200 rounded-lg p-4">
+                                        <h4 class="font-medium text-gray-900 mb-3">Reference Files</h4>
+                                        <p class="text-sm text-gray-600 mb-3">Upload reference genome and annotation files if needed</p>
+                                        
+                                        <div class="space-y-3">
+                                            {% if template.id == 'variant-calling-pipeline' %}
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Reference Genome (FASTA)</label>
+                                                <input type="file" name="reference_genome" accept=".fasta,.fa,.fa.gz" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                            </div>
+                                            {% endif %}
+                                            
+                                            {% if template.id == 'rna-seq-pipeline' %}
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">GTF/GFF Annotation File</label>
+                                                <input type="file" name="annotation_file" accept=".gtf,.gff" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Submit Button -->
+                        <div class="mt-8 flex justify-end">
+                            <button type="submit" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-md transition duration-200 text-lg">
+                                <i class="fas fa-play mr-2"></i>Start Workflow Pipeline
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Workflow Preview -->
+            <div class="lg:col-span-1">
+                <div class="bg-white shadow rounded-lg p-6 sticky top-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Pipeline Overview</h3>
+                    
+                    <!-- Template Info -->
+                    <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <i class="{{ template.icon }} text-2xl text-blue-600 mr-3"></i>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">{{ template.name }}</h4>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ template.color }}">
+                                    {{ template.category }}
+                                </span>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">{{ template.description }}</p>
+                        <div class="flex items-center justify-between text-sm text-gray-500">
+                            <span><i class="fas fa-clock mr-1"></i>{{ template.estimated_time }}</span>
+                            <span><i class="fas fa-signal mr-1"></i>{{ template.difficulty }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Pipeline Steps -->
+                    <div class="space-y-3">
+                        <h4 class="font-medium text-gray-900">Pipeline Steps</h4>
+                        {% for tool in template.tools %}
+                        <div class="flex items-center space-x-3">
+                            <div class="flex-shrink-0 w-8 h-8 {% if forloop.first %}bg-green-100 text-green-600{% elif forloop.last %}bg-purple-100 text-purple-600{% else %}bg-blue-100 text-blue-600{% endif %} rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium">{{ forloop.counter }}</span>
+                            </div>
+                            <div class="flex-1">
+                                <h5 class="font-medium text-gray-900">{{ tool|title }}</h5>
+                                <p class="text-sm text-gray-500">
+                                    {% if forloop.first %}
+                                    <span class="text-green-600 font-medium">Primary Input</span>
+                                    {% elif forloop.last %}
+                                    <span class="text-purple-600 font-medium">Final Output</span>
+                                    {% else %}
+                                    <span class="text-blue-600 font-medium">Pipeline Step</span>
+                                    {% endif %}
+                                </p>
+                                <p class="text-xs text-gray-400">
+                                    {% if tool == 'fastqc' %}
+                                    Quality control analysis
+                                    {% elif tool == 'trimmomatic' %}
+                                    Read trimming and filtering
+                                    {% elif tool == 'spades' %}
+                                    Genome assembly
+                                    {% elif tool == 'quast' %}
+                                    Assembly quality assessment
+                                    {% elif tool == 'bwa' %}
+                                    Sequence alignment
+                                    {% elif tool == 'samtools' %}
+                                    SAM/BAM processing
+                                    {% elif tool == 'gatk' %}
+                                    Variant calling
+                                    {% elif tool == 'star' %}
+                                    RNA-seq alignment
+                                    {% elif tool == 'muscle' %}
+                                    Multiple sequence alignment
+                                    {% else %}
+                                    Bioinformatics analysis
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Expected Outputs -->
+                    <div class="mt-6 pt-6 border-t border-gray-200">
+                        <h4 class="font-medium text-gray-900 mb-3">Expected Outputs</h4>
+                        <div class="space-y-2">
+                            {% for output in template.output_formats %}
+                            <div class="flex items-center text-sm text-gray-600">
+                                <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                {{ output }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Pipeline Benefits -->
+                    <div class="mt-6 pt-6 border-t border-gray-200">
+                        <h4 class="font-medium text-gray-900 mb-3">Pipeline Benefits</h4>
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <div class="flex items-center">
+                                <i class="fas fa-arrow-right text-blue-500 mr-2"></i>
+                                Automatic data flow between tools
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-arrow-right text-blue-500 mr-2"></i>
+                                No manual file transfer needed
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-arrow-right text-blue-500 mr-2"></i>
+                                Consistent data processing
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// File upload handling for primary files
+document.getElementById('primary-files').addEventListener('change', function(e) {
+    const files = Array.from(e.target.files);
+    const fileList = document.getElementById('primary-files-list');
+    
+    fileList.innerHTML = '';
+    files.forEach(file => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'flex items-center justify-between p-2 bg-white border rounded text-sm';
+        fileItem.innerHTML = `
+            <span class="text-gray-700">${file.name}</span>
+            <span class="text-gray-500 text-xs">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+        `;
+        fileList.appendChild(fileItem);
+    });
+});
+
+// Form validation
+document.getElementById('workflow-form').addEventListener('submit', function(e) {
+    const runName = document.getElementById('run_name').value.trim();
+    if (!runName) {
+        e.preventDefault();
+        alert('Please provide a run name');
+        return;
+    }
+    
+    // Check if primary files are uploaded
+    const primaryFiles = document.getElementById('primary-files').files;
+    if (primaryFiles.length === 0) {
+        e.preventDefault();
+        alert('Please upload at least one primary input file to start the pipeline.');
+        return;
+    }
+    
+    // Show confirmation with pipeline details
+    const toolCount = {{ template.tools|length }};
+    if (!confirm(`Start ${template.name} pipeline with ${toolCount} tools?\n\nPrimary files will be processed by ${template.tools.0|title}, and outputs will automatically flow through the pipeline.`)) {
+        e.preventDefault();
+        return;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+FROM ubuntu:22.04
+
+# BIOFRAME_TOOL_METADATA
+# tool_name: BEDtools
+# tool_description: Swiss army knife for genome arithmetic
+# tool_version: 2.30.0
+# tool_category: Genome Analysis
+# tool_input_formats: BED, GFF, VCF, SAM, BAM
+# tool_output_formats: BED, GFF, VCF, TXT
+# tool_author: Aaron Quinlan
+# tool_url: https://github.com/arq5x/bedtools2
+# tool_icon: tools
+# tool_color: teal
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install BEDtools from pre-built binary (much faster)
+RUN wget https://github.com/arq5x/bedtools2/releases/download/v2.30.0/bedtools-2.30.0.tar.gz \
+    && tar -xzf bedtools-2.30.0.tar.gz \
+    && cd bedtools2 \
+    && make \
+    && make install \
+    && cd / \
+    && rm -rf bedtools2 bedtools-2.30.0.tar.gz
+
+# Install additional bioinformatics tools
+RUN pip3 install \
+    numpy \
+    pandas \
+    matplotlib \
+    seaborn \
+    biopython \
+    pybedtools
+
+# Create working directories
+RUN mkdir -p /data /logs /output
+
+# Set working directory
+WORKDIR /data
+
+# Default command
+CMD ["bedtools", "--help"]

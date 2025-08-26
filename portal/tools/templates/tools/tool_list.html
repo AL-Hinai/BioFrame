@@ -1,0 +1,226 @@
+{% extends 'bioframe/base.html' %}
+{% load static %}
+
+{% block title %}Bioinformatics Tools - BioFrame{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-tools text-blue-600 mr-3"></i>
+                Bioinformatics Tools
+            </h1>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Discover and explore our comprehensive collection of bioinformatics analysis tools. 
+                Each tool is automatically detected and provides detailed metadata for your research needs.
+            </p>
+        </div>
+
+        <!-- Tools Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            {% for tool in tools %}
+            <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200">
+                <div class="p-6">
+                    <!-- Tool Header -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-dna text-white text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-900">{{ tool.name }}</h3>
+                                <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                                    {{ tool.category }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="inline-block px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                {{ tool.status }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Tool Description -->
+                    <p class="text-gray-600 text-sm mb-4 line-clamp-2">{{ tool.description }}</p>
+
+                    <!-- Tool Metadata -->
+                    <div class="space-y-2 mb-4">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-500">Version:</span>
+                            <span class="font-medium text-gray-900">{{ tool.version }}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-500">Author:</span>
+                            <span class="font-medium text-gray-900">{{ tool.author|default:"BioFrame Team" }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex space-x-2">
+                        <button onclick="showToolDetails('{{ tool.name }}', {{ tool|safe }})" 
+                                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            View Details
+                        </button>
+                        <button onclick="useInWorkflow('{{ tool.name }}')" 
+                                class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200">
+                            <i class="fas fa-plus mr-2"></i>
+                            Use in Workflow
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Back to Dashboard -->
+        <div class="text-center">
+            <a href="{% url 'dashboard' %}" 
+               class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-200">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Tool Details Modal -->
+<div id="toolModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 id="modalTitle" class="text-2xl font-bold text-gray-900"></h2>
+                <button onclick="closeMetadataModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Content -->
+            <div id="modalContent" class="p-6">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between p-6 border-t border-gray-200">
+                <button onclick="closeMetadataModal()" 
+                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                    Close
+                </button>
+                <button id="executeButton" onclick="executeTool()" 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 hidden">
+                    <i class="fas fa-play mr-2"></i>
+                    Execute Tool
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showToolDetails(toolName, toolData) {
+    document.getElementById('modalTitle').textContent = toolName.charAt(0).toUpperCase() + toolName.slice(1);
+    const modalContent = document.getElementById('modalContent');
+    
+    modalContent.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Left Column -->
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">Basic Information</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Name:</span>
+                            <span class="font-medium">${toolData.name}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Category:</span>
+                            <span class="font-medium">${toolData.category}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Status:</span>
+                            <span class="font-medium text-${toolData.status === 'available' ? 'green' : 'red'}-600">${toolData.status}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Version:</span>
+                            <span class="font-medium">${toolData.version || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">File Formats</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Input Formats:</span>
+                            <span class="font-medium">${toolData.input_formats || 'Various'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Output Formats:</span>
+                            <span class="font-medium">${toolData.output_formats || 'Various'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column -->
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">Description</h4>
+                    <p class="text-gray-700 leading-relaxed">${toolData.description}</p>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">Technical Details</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Tool ID:</span>
+                            <span class="font-mono text-sm">${toolData.tool_id || toolData.name}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Dockerfile Path:</span>
+                            <span class="font-mono text-sm">${toolData.dockerfile_path || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Last Modified:</span>
+                            <span class="font-medium">${toolData.last_modified || 'Unknown'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Author:</span>
+                            <span class="font-medium">${toolData.author || 'BioFrame Team'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Show/hide execute button based on tool status
+    const executeButton = document.getElementById('executeButton');
+    if (toolData.status === 'available') {
+        executeButton.classList.remove('hidden');
+    } else {
+        executeButton.classList.add('hidden');
+    }
+    
+    document.getElementById('toolModal').classList.remove('hidden');
+}
+
+function closeMetadataModal() {
+    document.getElementById('toolModal').classList.add('hidden');
+}
+
+function useInWorkflow(toolName) {
+    // Redirect to workflow creation page with the tool pre-selected
+    window.location.href = `{% url 'create_workflow' %}?tool=${toolName}`;
+}
+
+function executeTool() {
+    // Placeholder for tool execution
+    alert('Tool execution functionality will be implemented here');
+}
+</script>
+{% endblock %}

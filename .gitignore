@@ -1,0 +1,108 @@
+# BioFrame Project - Root .gitignore
+# This file ensures data directories and generated files are not tracked
+
+# Data directories
+data/
+data/runs/
+data/logs/
+logs/
+
+# Data files
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.fasta
+*.fa
+*.fa.gz
+*.bam
+*.sam
+*.vcf
+*.gtf
+*.gff
+*.bw
+*.bigwig
+*.bed
+*.gff3
+*.gfa
+*.phylip
+*.nexus
+*.newick
+*.tree
+
+# Log files
+*.log
+*.log.*
+*.out
+*.err
+
+# Compressed files
+*.gz
+*.bz2
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+docker-data/
+volumes/
+*.env
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Large files
+*.large
+*.huge
