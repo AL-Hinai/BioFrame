@@ -66,15 +66,15 @@
                                         <div class="space-y-3">
                                             <div>
                                                 <label class="block text-sm font-medium text-blue-800">Upload Input Files</label>
-                                                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-blue-300 border-dashed rounded-md bg-white">
+                                                <div id="drop-zone" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-blue-300 border-dashed rounded-md bg-white hover:bg-blue-50 transition-colors duration-200 cursor-pointer">
                                                     <div class="space-y-1 text-center">
                                                         <i class="fas fa-cloud-upload-alt text-blue-400 text-3xl mb-2"></i>
                                                         <div class="flex text-sm text-blue-600">
                                                             <label for="primary-files" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                                                                <span>Upload files</span>
+                                                                <span>Browse files</span>
                                                                 <input id="primary-files" name="primary_files" type="file" class="sr-only" multiple accept=".fastq,.fastq.gz,.fq,.fq.gz,.fasta,.fa,.fa.gz,.bam,.sam,.vcf,.gtf,.gff">
                                                             </label>
-                                                            <p class="pl-1">or drag and drop</p>
+                                                            <p class="pl-1">or drag and drop here</p>
                                                         </div>
                                                         <p class="text-xs text-blue-500">
                                                             {% if template.id == 'quality-control-pipeline' or template.id == 'assembly-pipeline' or template.id == 'metagenomics-pipeline' or template.id == 'rna-seq-pipeline' %}
@@ -87,6 +87,7 @@
                                                             Various formats
                                                             {% endif %}
                                                         </p>
+                                                        <p class="text-xs text-gray-400 mt-2">Drop files here or click to browse</p>
                                                     </div>
                                                 </div>
                                                 <div id="primary-files-list" class="mt-2 space-y-1"></div>
@@ -148,7 +149,7 @@
                                             {% if template.id == 'rna-seq-pipeline' %}
                                             <div>
                                                 <label class="block text-sm font-medium text-gray-700">GTF/GFF Annotation File</label>
-                                                <input type="file" name="annotation_file" accept=".gtf,.gff" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                                <input type="file" name="annotation_file" accept=".gtf,.gff" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                                             </div>
                                             {% endif %}
                                         </div>
@@ -160,8 +161,7 @@
                         
                         <!-- Submit Button -->
                         <div class="mt-8 flex justify-end">
-                            <button type="submit" 
-                                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-md transition duration-200 text-lg">
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-md transition duration-200 text-lg">
                                 <i class="fas fa-play mr-2"></i>Start Workflow Pipeline
                             </button>
                         </div>
@@ -169,74 +169,72 @@
                 </div>
             </div>
             
-            <!-- Workflow Preview -->
+            <!-- Sidebar -->
             <div class="lg:col-span-1">
-                <div class="bg-white shadow rounded-lg p-6 sticky top-8">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Pipeline Overview</h3>
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Pipeline Information</h3>
                     
-                    <!-- Template Info -->
-                    <div class="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <div class="flex items-center mb-3">
-                            <i class="{{ template.icon }} text-2xl text-blue-600 mr-3"></i>
-                            <div>
-                                <h4 class="font-semibold text-gray-900">{{ template.name }}</h4>
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ template.color }}">
-                                    {{ template.category }}
-                                </span>
-                            </div>
+                    <!-- Template Details -->
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="font-medium text-gray-900">Template</h4>
+                            <p class="text-sm text-gray-600">{{ template.name }}</p>
                         </div>
-                        <p class="text-sm text-gray-600 mb-3">{{ template.description }}</p>
-                        <div class="flex items-center justify-between text-sm text-gray-500">
-                            <span><i class="fas fa-clock mr-1"></i>{{ template.estimated_time }}</span>
-                            <span><i class="fas fa-signal mr-1"></i>{{ template.difficulty }}</span>
+                        
+                        <div>
+                            <h4 class="font-medium text-gray-900">Category</h4>
+                            <p class="text-sm text-gray-600">{{ template.category }}</p>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-medium text-gray-900">Estimated Time</h4>
+                            <p class="text-sm text-gray-600">{{ template.estimated_time }}</p>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-medium text-gray-900">Difficulty</h4>
+                            <p class="text-sm text-gray-600">{{ template.difficulty }}</p>
                         </div>
                     </div>
                     
-                    <!-- Pipeline Steps -->
-                    <div class="space-y-3">
-                        <h4 class="font-medium text-gray-900">Pipeline Steps</h4>
-                        {% for tool in template.tools %}
-                        <div class="flex items-center space-x-3">
-                            <div class="flex-shrink-0 w-8 h-8 {% if forloop.first %}bg-green-100 text-green-600{% elif forloop.last %}bg-purple-100 text-purple-600{% else %}bg-blue-100 text-blue-600{% endif %} rounded-full flex items-center justify-center">
-                                <span class="text-sm font-medium">{{ forloop.counter }}</span>
+                    <!-- Tools Used -->
+                    <div class="mt-6 pt-6 border-t border-gray-200">
+                        <h4 class="font-medium text-gray-900 mb-3">Tools in Pipeline</h4>
+                        <div class="space-y-2">
+                            {% for tool in template.tools %}
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0 w-8 h-8 {% if forloop.first %}bg-green-100 text-green-600{% elif forloop.last %}bg-purple-100 text-purple-600{% else %}bg-blue-100 text-blue-600{% endif %} rounded-full flex items-center justify-center">
+                                    <span class="text-sm font-medium">{{ forloop.counter }}</span>
+                                </div>
+                                <div class="flex-1">
+                                    <h5 class="font-medium text-gray-900">{{ tool|title }}</h5>
+                                    <p class="text-sm text-gray-500">
+                                        {% if tool == 'fastqc' %}
+                                        Quality control analysis
+                                        {% elif tool == 'trimmomatic' %}
+                                        Read trimming and filtering
+                                        {% elif tool == 'spades' %}
+                                        Genome assembly
+                                        {% elif tool == 'quast' %}
+                                        Assembly quality assessment
+                                        {% elif tool == 'bwa' %}
+                                        Sequence alignment
+                                        {% elif tool == 'samtools' %}
+                                        SAM/BAM processing
+                                        {% elif tool == 'gatk' %}
+                                        Variant calling
+                                        {% elif tool == 'star' %}
+                                        RNA-seq alignment
+                                        {% elif tool == 'muscle' %}
+                                        Multiple sequence alignment
+                                        {% else %}
+                                        Bioinformatics analysis
+                                        {% endif %}
+                                    </p>
+                                </div>
                             </div>
-                            <div class="flex-1">
-                                <h5 class="font-medium text-gray-900">{{ tool|title }}</h5>
-                                <p class="text-sm text-gray-500">
-                                    {% if forloop.first %}
-                                    <span class="text-green-600 font-medium">Primary Input</span>
-                                    {% elif forloop.last %}
-                                    <span class="text-purple-600 font-medium">Final Output</span>
-                                    {% else %}
-                                    <span class="text-blue-600 font-medium">Pipeline Step</span>
-                                    {% endif %}
-                                </p>
-                                <p class="text-xs text-gray-400">
-                                    {% if tool == 'fastqc' %}
-                                    Quality control analysis
-                                    {% elif tool == 'trimmomatic' %}
-                                    Read trimming and filtering
-                                    {% elif tool == 'spades' %}
-                                    Genome assembly
-                                    {% elif tool == 'quast' %}
-                                    Assembly quality assessment
-                                    {% elif tool == 'bwa' %}
-                                    Sequence alignment
-                                    {% elif tool == 'samtools' %}
-                                    SAM/BAM processing
-                                    {% elif tool == 'gatk' %}
-                                    Variant calling
-                                    {% elif tool == 'star' %}
-                                    RNA-seq alignment
-                                    {% elif tool == 'muscle' %}
-                                    Multiple sequence alignment
-                                    {% else %}
-                                    Bioinformatics analysis
-                                    {% endif %}
-                                </p>
-                            </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
                     </div>
                     
                     <!-- Expected Outputs -->
@@ -277,34 +275,210 @@
 </div>
 
 <script>
-// File upload handling for primary files
-document.getElementById('primary-files').addEventListener('change', function(e) {
-    const files = Array.from(e.target.files);
+// Enhanced drag and drop functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('primary-files');
     const fileList = document.getElementById('primary-files-list');
     
-    fileList.innerHTML = '';
-    files.forEach(file => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'flex items-center justify-between p-2 bg-white border rounded text-sm';
-        fileItem.innerHTML = `
-            <span class="text-gray-700">${file.name}</span>
-            <span class="text-gray-500 text-xs">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
-        `;
-        fileList.appendChild(fileItem);
+    if (!dropZone || !fileInput || !fileList) {
+        console.error('Required elements not found');
+        return;
+    }
+    
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
     });
+    
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+    
+    // Handle dropped files
+    dropZone.addEventListener('drop', handleDrop, false);
+    
+    // Click to browse functionality
+    dropZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+    
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    function highlight(e) {
+        dropZone.classList.add('border-blue-500', 'bg-blue-100');
+        dropZone.classList.remove('border-blue-300');
+    }
+    
+    function unhighlight(e) {
+        dropZone.classList.remove('border-blue-500', 'bg-blue-100');
+        dropZone.classList.add('border-blue-300');
+    }
+    
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        if (files.length > 0) {
+            // Update the file input with dropped files
+            fileInput.files = files;
+            
+            // Trigger the change event to update the file list
+            const event = new Event('change', { bubbles: true });
+            fileInput.dispatchEvent(event);
+            
+            // Show success message
+            showFileUploadMessage('Files dropped successfully!', 'success');
+        }
+    }
+    
+    // File upload handling for primary files
+    fileInput.addEventListener('change', function(e) {
+        const files = Array.from(e.target.files);
+        updateFileList(files);
+        
+        if (files.length > 0) {
+            showFileUploadMessage(`${files.length} file(s) selected`, 'success');
+        }
+    });
+    
+    function updateFileList(files) {
+        fileList.innerHTML = '';
+        
+        if (files.length === 0) {
+            fileList.innerHTML = '<p class="text-sm text-gray-500 italic">No files selected</p>';
+            return;
+        }
+        
+        files.forEach((file, index) => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'flex items-center justify-between p-3 bg-white border border-gray-200 rounded-md text-sm hover:bg-gray-50';
+            
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            const fileType = getFileType(file.name);
+            
+            fileItem.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 ${getFileTypeColor(fileType)} rounded-full flex items-center justify-center">
+                        <i class="fas ${getFileTypeIcon(fileType)} text-white text-xs"></i>
+                    </div>
+                    <div>
+                        <span class="font-medium text-gray-700">${file.name}</span>
+                        <p class="text-xs text-gray-500">${fileSize} MB • ${fileType.toUpperCase()}</p>
+                    </div>
+                </div>
+                <button type="button" onclick="removeFile(${index})" class="text-red-500 hover:text-red-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            fileList.appendChild(fileItem);
+        });
+    }
+    
+    function getFileType(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        if (['fastq', 'fq'].includes(ext)) return 'fastq';
+        if (['fasta', 'fa'].includes(ext)) return 'fasta';
+        if (['bam'].includes(ext)) return 'bam';
+        if (['sam'].includes(ext)) return 'sam';
+        if (['vcf'].includes(ext)) return 'vcf';
+        if (['gtf', 'gff'].includes(ext)) return 'annotation';
+        return 'other';
+    }
+    
+    function getFileTypeColor(fileType) {
+        const colors = {
+            'fastq': 'bg-blue-500',
+            'fasta': 'bg-green-500',
+            'bam': 'bg-purple-500',
+            'sam': 'bg-purple-500',
+            'vcf': 'bg-orange-500',
+            'annotation': 'bg-indigo-500',
+            'other': 'bg-gray-500'
+        };
+        return colors[fileType] || colors.other;
+    }
+    
+    function getFileTypeIcon(fileType) {
+        const icons = {
+            'fastq': 'fa-dna',
+            'fasta': 'fa-file-alt',
+            'bam': 'fa-file-binary',
+            'sam': 'fa-file-text',
+            'vcf': 'fa-list',
+            'annotation': 'fa-tags',
+            'other': 'fa-file'
+        };
+        return icons[fileType] || icons.other;
+    }
+    
+    // Make removeFile function global
+    window.removeFile = function(index) {
+        const dt = new DataTransfer();
+        const files = Array.from(fileInput.files);
+        
+        files.splice(index, 1);
+        files.forEach(file => dt.items.add(file));
+        
+        fileInput.files = dt.files;
+        updateFileList(Array.from(fileInput.files));
+        
+        if (fileInput.files.length === 0) {
+            showFileUploadMessage('All files removed', 'info');
+        }
+    };
+    
+    function showFileUploadMessage(message, type) {
+        // Remove existing message
+        const existingMessage = document.querySelector('.file-upload-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+        
+        // Create new message
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `file-upload-message mt-2 p-2 rounded-md text-sm ${
+            type === 'success' ? 'bg-green-100 text-green-800' :
+            type === 'error' ? 'bg-red-100 text-red-800' :
+            'bg-blue-100 text-blue-800'
+        }`;
+        messageDiv.innerHTML = `
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'} mr-2"></i>
+            ${message}
+        `;
+        
+        fileList.parentNode.insertBefore(messageDiv, fileList);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.remove();
+            }
+        }, 3000);
+    }
 });
 
 // Form validation
 document.getElementById('workflow-form').addEventListener('submit', function(e) {
     const runName = document.getElementById('run_name').value.trim();
+    const primaryFiles = document.getElementById('primary-files').files;
+    
     if (!runName) {
         e.preventDefault();
         alert('Please provide a run name');
         return;
     }
     
-    // Check if primary files are uploaded
-    const primaryFiles = document.getElementById('primary-files').files;
     if (primaryFiles.length === 0) {
         e.preventDefault();
         alert('Please upload at least one primary input file to start the pipeline.');
@@ -313,10 +487,17 @@ document.getElementById('workflow-form').addEventListener('submit', function(e) 
     
     // Show confirmation with pipeline details
     const toolCount = {{ template.tools|length }};
-    if (!confirm(`Start ${template.name} pipeline with ${toolCount} tools?\n\nPrimary files will be processed by ${template.tools.0|title}, and outputs will automatically flow through the pipeline.`)) {
+    const templateName = '{{ template.name }}';
+    
+    if (!confirm(`Start "${templateName}" pipeline with ${toolCount} tools?\n\nPrimary files will be processed by {{ template.tools.0|title }}, and outputs will automatically flow through the pipeline.`)) {
         e.preventDefault();
         return;
     }
+    
+    // Show loading state
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting Pipeline...';
 });
 </script>
 {% endblock %}

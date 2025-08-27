@@ -7,6 +7,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./portal:/app
       - ./data:/app/data
       - ./logs:/app/logs
       - ./tools:/app/host-tools

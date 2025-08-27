@@ -29,5 +29,5 @@ RUN chmod +x /workflow/orchestrator.py
 # Expose port
 EXPOSE 8001
 
-# Default command
-CMD ["python", "orchestrator.py"]
+# Default command - run as service
+CMD ["python", "orchestrator.py", "--data-dir", "/data", "--init-docker"]

@@ -192,11 +192,29 @@ class WorkflowOrchestrator:
                         # Update progress
                         workflow_run.progress = ((i + 1) / len(workflow_run.tools)) * 100
                         
-                        # For pipeline: next tool's input becomes current tool's output
+                        # For quality control pipelines: preserve original input files for tools that need them
                         if i < len(workflow_run.tools) - 1:  # Not the last tool
-                            current_input_files = output_files.copy()
-                            logger.info(f"✅ Tool {tool_exec.tool_name} completed. Output files: {output_files}")
-                            logger.info(f"🔄 Output files will be used as input for next tool: {workflow_run.tools[i+1].tool_name}")
+                            next_tool = workflow_run.tools[i+1].tool_name
+                            
+                            # Quality control tools need the original input files, not the previous tool's output
+                            if next_tool in ['trimmomatic', 'spades', 'bwa']:
+                                # Get the original input files from the workflow run
+                                original_input_dir = Path(workflow_run.run_directory) / "input"
+                                if original_input_dir.exists():
+                                    original_files = [str(f) for f in original_input_dir.glob("*.fastq*")]
+                                    if original_files:
+                                        current_input_files = original_files
+                                        logger.info(f"✅ Tool {tool_exec.tool_name} completed. Using original input files for {next_tool}: {original_files}")
+                                    else:
+                                        current_input_files = output_files.copy()
+                                        logger.info(f"✅ Tool {tool_exec.tool_name} completed. No original files found, using output files for {next_tool}: {output_files}")
+                                else:
+                                    current_input_files = output_files.copy()
+                                    logger.info(f"✅ Tool {tool_exec.tool_name} completed. No input directory, using output files for {next_tool}: {output_files}")
+                            else:
+                                # For other tools, use the output files as input
+                                current_input_files = output_files.copy()
+                                logger.info(f"✅ Tool {tool_exec.tool_name} completed. Output files will be used as input for next tool: {next_tool}")
                         else:
                             logger.info(f"🎉 Final tool {tool_exec.tool_name} completed. Pipeline finished!")
                         
@@ -242,11 +260,13 @@ class WorkflowOrchestrator:
             # Create output directory
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Simulate tool execution (replace with actual tool execution logic)
+            # Route to appropriate tool execution method
             if tool_name == 'fastqc':
                 return self._execute_fastqc(input_files, output_dir)
             elif tool_name == 'trimmomatic':
                 return self._execute_trimmomatic(input_files, output_dir)
+            elif tool_name == 'multiqc':
+                return self._execute_multiqc(input_files, output_dir)
             elif tool_name == 'spades':
                 return self._execute_spades(input_files, output_dir)
             elif tool_name == 'quast':
@@ -266,49 +286,192 @@ class WorkflowOrchestrator:
             return False, []
     
     def _execute_fastqc(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute FastQC quality control"""
+        """Execute FastQC quality control using Docker"""
         try:
-            # Simulate FastQC execution
+            logger.info(f"Running FastQC on {len(input_files)} input files")
+            
+            # Ensure output_dir is a Path object
+            if isinstance(output_dir, str):
+                output_dir = Path(output_dir)
+            
+            # Create output directory
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
             output_files = []
             for input_file in input_files:
-                base_name = Path(input_file).stem
-                html_report = output_dir / f"{base_name}_fastqc.html"
-                zip_report = output_dir / f"{base_name}_fastqc.zip"
+                input_path = Path(input_file)
+                base_name = input_path.stem
                 
-                # Create dummy output files for demonstration
-                html_report.write_text(f"<html><body><h1>FastQC Report for {base_name}</h1></body></html>")
-                zip_report.write_text("FastQC zip report content")
+                # Convert container paths to absolute host paths for Docker volume mounting
+                # The orchestrator container has ./data:/data mounted, but we need absolute host paths
+                # Since the orchestrator runs docker commands from the host context, we need absolute paths
+                import os
+                # Get the absolute host path by replacing /data with the actual host project directory
+                # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
+                host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
+                host_input_dir = str(input_path.parent).replace('/data', host_project_dir + '/data')
+                host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
                 
-                output_files.extend([str(html_report), str(zip_report)])
+                # Run FastQC using Docker with correct host paths
+                cmd = [
+                    "docker", "run", "--rm",
+                    "-v", f"{host_input_dir}:/input",
+                    "-v", f"{host_output_dir}:/output",
+                    "-w", "/output",
+                    "bioframe-fastqc",
+                    "fastqc", "-o", "/output", f"/input/{input_path.name}"
+                ]
+                
+                logger.info(f"Executing: {' '.join(cmd)}")
+                
+                # Execute the command
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if result.returncode == 0:
+                    # Find generated output files
+                    html_files = list(output_dir.glob("*_fastqc.html"))
+                    zip_files = list(output_dir.glob("*_fastqc.zip"))
+                    
+                    output_files.extend([str(f) for f in html_files + zip_files])
+                    logger.info(f"FastQC completed successfully for {input_path.name}")
+                else:
+                    logger.error(f"FastQC failed for {input_path.name}: {result.stderr}")
+                    return False, []
             
             logger.info(f"FastQC completed. Output files: {output_files}")
             return True, output_files
             
+        except subprocess.TimeoutExpired:
+            logger.error("FastQC execution timed out")
+            return False, []
         except Exception as e:
             logger.error(f"FastQC execution failed: {e}")
             return False, []
     
     def _execute_trimmomatic(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute Trimmomatic read trimming"""
+        """Execute Trimmomatic read trimming using Docker"""
         try:
-            # Simulate Trimmomatic execution
+            logger.info(f"Running Trimmomatic on {len(input_files)} input files")
+            
+            # Ensure output_dir is a Path object
+            if isinstance(output_dir, str):
+                output_dir = Path(output_dir)
+            
+            # Create output directory
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
             output_files = []
             for input_file in input_files:
-                base_name = Path(input_file).stem
-                trimmed_file = output_dir / f"{base_name}_trimmed.fastq"
-                log_file = output_dir / f"{base_name}_trimmomatic.log"
+                input_path = Path(input_file)
+                base_name = input_path.stem
                 
-                # Create dummy output files
-                trimmed_file.write_text("Trimmed FASTQ content")
-                log_file.write_text("Trimmomatic log content")
+                # Convert container paths to absolute host paths for Docker volume mounting
+                # The orchestrator container has ./data:/data mounted, but we need absolute host paths
+                # Since the orchestrator runs docker commands from the host context, we need absolute paths
+                import os
+                # Get the absolute host path by replacing /data with the actual host project directory
+                # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
+                host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
+                host_input_dir = str(input_path.parent).replace('/data', host_project_dir + '/data')
+                host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
                 
-                output_files.extend([str(trimmed_file), str(log_file)])
+                # Run Trimmomatic using Docker with correct host paths
+                cmd = [
+                    "docker", "run", "--rm",
+                    "-v", f"{host_input_dir}:/input",
+                    "-v", f"{host_output_dir}:/output",
+                    "-w", "/output",
+                    "bioframe-trimmomatic",
+                    "trimmomatic", "PE",
+                    f"/input/{input_path.name}",
+                    "/dev/null",  # Single-end mode for now
+                    f"{base_name}_trimmed.fastq",
+                    "ILLUMINACLIP:TruSeq3-SE:2:30:10",
+                    "LEADING:3",
+                    "TRAILING:3",
+                    "SLIDINGWINDOW:4:15",
+                    "MINLEN:36"
+                ]
+                
+                logger.info(f"Executing: {' '.join(cmd)}")
+                
+                # Execute the command
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                
+                if result.returncode == 0:
+                    # Find generated output files
+                    trimmed_files = list(output_dir.glob("*_trimmed.fastq"))
+                    log_files = list(output_dir.glob("*.log"))
+                    
+                    output_files.extend([str(f) for f in trimmed_files + log_files])
+                    logger.info(f"Trimmomatic completed successfully for {input_path.name}")
+                else:
+                    logger.error(f"Trimmomatic failed for {input_path.name}: {result.stderr}")
+                    return False, []
             
             logger.info(f"Trimmomatic completed. Output files: {output_files}")
             return True, output_files
             
+        except subprocess.TimeoutExpired:
+            logger.error("Trimmomatic execution timed out")
+            return False, []
         except Exception as e:
             logger.error(f"Trimmomatic execution failed: {e}")
+            return False, []
+    
+    def _execute_multiqc(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
+        """Execute MultiQC report generation using Docker"""
+        try:
+            logger.info(f"Running MultiQC on {len(input_files)} input files")
+            
+            # Ensure output_dir is a Path object
+            if isinstance(output_dir, str):
+                output_dir = Path(output_dir)
+            
+            # Create output directory
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Convert container paths to absolute host paths for Docker volume mounting
+            # The orchestrator container has ./data:/data mounted, but we need absolute host paths
+            # Since the orchestrator runs docker commands from the host context, we need absolute paths
+            import os
+            # Get the absolute host path by replacing /data with the actual host project directory
+            # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
+            host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
+            host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
+            
+            # Run MultiQC using Docker with correct host paths
+            cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{host_output_dir}:/output",
+                "-w", "/output",
+                "bioframe-multiqc",
+                "multiqc", ".",
+                "-o", "/output"
+            ]
+            
+            logger.info(f"Executing: {' '.join(cmd)}")
+            
+            # Execute the command
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                # Find generated output files
+                html_files = list(output_dir.glob("multiqc_report.html"))
+                data_files = list(output_dir.glob("multiqc_data"))
+                
+                output_files = [str(f) for f in html_files + data_files]
+                logger.info(f"MultiQC completed successfully. Output files: {output_files}")
+                return True, output_files
+            else:
+                logger.error(f"MultiQC failed: {result.stderr}")
+                return False, []
+            
+        except subprocess.TimeoutExpired:
+            logger.error("MultiQC execution timed out")
+            return False, []
+        except Exception as e:
+            logger.error(f"MultiQC execution failed: {e}")
             return False, []
     
     def _execute_spades(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
@@ -754,22 +917,56 @@ class WorkflowOrchestrator:
 
 # Example usage and testing
 if __name__ == "__main__":
-    # Test the orchestrator
-    orchestrator = WorkflowOrchestrator(data_dir="./data", init_docker=False)
+    import argparse
     
-    print("🔧 Testing BioFrame Workflow Orchestrator")
-    print("=" * 50)
+    parser = argparse.ArgumentParser(description='BioFrame Workflow Orchestrator')
+    parser.add_argument('--test', action='store_true', help='Run in test mode')
+    parser.add_argument('--data-dir', default='./data', help='Data directory path')
+    parser.add_argument('--init-docker', action='store_true', help='Initialize Docker client')
     
-    # Discover existing runs
-    runs = orchestrator.discover_workflow_runs()
-    print(f"📊 Found {len(runs)} existing workflow runs")
+    args = parser.parse_args()
     
-    # Create a test run
-    test_run = orchestrator.create_sample_run(
-        name="Test Workflow",
-        description="A test workflow for demonstration",
-        tools=['fastqc', 'trimmomatic', 'spades']
-    )
-    print(f"✅ Created test run: {test_run.id}")
-    
-    print("\n🎉 Orchestrator test completed successfully!")
+    if args.test:
+        # Test mode - run tests and exit
+        orchestrator = WorkflowOrchestrator(data_dir=args.data_dir, init_docker=args.init_docker)
+        
+        print("🔧 Testing BioFrame Workflow Orchestrator")
+        print("=" * 50)
+        
+        # Discover existing runs
+        runs = orchestrator.discover_workflow_runs()
+        print(f"📊 Found {len(runs)} existing workflow runs")
+        
+        # Create a test run
+        test_run = orchestrator.create_sample_run(
+            name="Test Workflow",
+            description="A test workflow for demonstration",
+            tools=['fastqc', 'trimmomatic', 'spades']
+        )
+        print(f"✅ Created test run: {test_run.id}")
+        
+        print("\n🎉 Orchestrator test completed successfully!")
+    else:
+        # Service mode - keep running
+        print("🚀 Starting BioFrame Workflow Orchestrator Service")
+        print("=" * 50)
+        
+        orchestrator = WorkflowOrchestrator(data_dir=args.data_dir, init_docker=args.init_docker)
+        
+        # Discover existing runs
+        runs = orchestrator.discover_workflow_runs()
+        print(f"📊 Found {len(runs)} existing workflow runs")
+        
+        print("✅ Orchestrator service is running and ready to handle workflows")
+        print("💡 Use --test flag to run in test mode")
+        
+        # Keep the service running
+        try:
+            while True:
+                time.sleep(60)  # Check every minute
+                # You could add periodic tasks here like checking for new workflows
+        except KeyboardInterrupt:
+            print("\n🛑 Orchestrator service stopped by user")
+        except Exception as e:
+            print(f"❌ Orchestrator service error: {e}")
+            raise

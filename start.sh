@@ -1,1 +1,62 @@
-module.exports={A:{A:{"2":"K D E F A B sC"},B:{"1":"0 Q H R S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z AB BB CB DB EB FB GB HB IB JB KB LB MB NB OB PB QB RB SB TB UB I","2":"C L M G N O P"},C:{"2":"0 1 2 3 4 5 6 7 8 9 tC QC J VB K D E F A B C L M G N O P WB XB YB ZB aB bB cB dB eB fB gB hB iB jB kB lB mB nB oB pB qB rB sB tB uB vB wB xB yB zB 0B RC 1B SC 2B 3B 4B 5B 6B 7B 8B 9B AC BC CC DC EC FC GC HC IC Q H R TC S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z AB BB CB DB EB FB GB HB IB JB KB LB MB NB OB PB QB RB SB TB UB I UC VC JC uC vC wC xC yC"},D:{"1":"0 EC FC GC HC IC Q H R S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z AB BB CB DB EB FB GB HB IB JB KB LB MB NB OB PB QB RB SB TB UB I UC VC JC","2":"1 2 3 4 5 6 7 8 9 J VB K D E F A B C L M G N O P WB XB YB ZB aB bB cB dB eB fB gB hB iB jB kB lB mB nB oB pB qB rB sB tB uB vB wB xB yB zB 0B RC 1B SC 2B 3B 4B 5B 6B 7B 8B 9B AC BC CC DC"},E:{"2":"J VB K D E F A B C L M G zC WC 0C 1C 2C 3C XC KC LC 4C 5C 6C YC ZC MC 7C NC aC bC cC dC eC 8C OC fC gC hC iC jC 9C PC kC lC mC nC oC pC AD"},F:{"1":"0 2B 3B 4B 5B 6B 7B 8B 9B AC BC CC DC EC FC GC HC IC Q H R TC S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z","2":"1 2 3 4 5 6 7 8 9 F B C G N O P WB XB YB ZB aB bB cB dB eB fB gB hB iB jB kB lB mB nB oB pB qB rB sB tB uB vB wB xB yB zB 0B 1B BD CD DD ED KC qC FD LC"},G:{"2":"E WC GD rC HD ID JD KD LD MD ND OD PD QD RD SD TD UD VD WD XD YD ZD YC ZC MC aD NC aC bC cC dC eC bD OC fC gC hC iC jC cD PC kC lC mC nC oC pC"},H:{"2":"dD"},I:{"1":"I","2":"QC J eD fD gD hD rC iD jD"},J:{"2":"D A"},K:{"1":"H","2":"A B C KC qC LC"},L:{"1":"I"},M:{"2":"JC"},N:{"2":"A B"},O:{"1":"MC"},P:{"1":"1 2 3 4 5 6 7 8 9 pD qD rD sD tD NC OC PC uD","2":"J kD lD mD nD oD XC"},Q:{"1":"vD"},R:{"1":"wD"},S:{"2":"xD yD"}},B:7,C:"IntersectionObserver V2",D:tru
+#!/bin/bash
+
+# BioFrame System Startup Script
+# This script starts the complete BioFrame bioinformatics workflow system
+
+echo "🚀 Starting BioFrame System..."
+echo "=============================="
+
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker is not running. Please start Docker and try again."
+    exit 1
+fi
+
+# Check if Docker Compose is available
+if ! command -v docker-compose &> /dev/null; then
+    echo "❌ Docker Compose is not installed. Please install Docker Compose and try again."
+    exit 1
+fi
+
+echo "✅ Docker and Docker Compose are available"
+
+# Create necessary directories
+echo "📁 Creating necessary directories..."
+mkdir -p data workflows logs
+
+# Build all containers
+echo "🔨 Building all containers..."
+docker-compose build
+
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to build containers. Please check the error messages above."
+    exit 1
+fi
+
+echo "✅ All containers built successfully"
+
+# Start the system
+echo "🚀 Starting BioFrame system..."
+docker-compose up -d
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "🎉 BioFrame system started successfully!"
+    echo ""
+    echo "📊 System Status:"
+    echo "=================="
+    docker-compose ps
+    echo ""
+    echo "🌐 Access the portal at: http://localhost:8000"
+    echo "📊 PostgreSQL database: localhost:5432"
+    echo "🔴 Redis: localhost:6380"
+    echo ""
+    echo "📖 For more information, see the README.md file"
+    echo "🧪 To test the system, run: ./test_containers.sh"
+    echo ""
+    echo "To stop the system, run: docker-compose down"
+    echo "To view logs, run: docker-compose logs -f"
+else
+    echo "❌ Failed to start BioFrame system. Please check the error messages above."
+    exit 1
+fi
