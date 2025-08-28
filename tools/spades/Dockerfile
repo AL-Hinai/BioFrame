@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # BIOFRAME_TOOL_METADATA
 # tool_name: SPAdes
 # tool_description: Assembler for single-cell and multi-cell data
-# tool_version: 3.15.5
+# tool_version: 4.2.0
 # tool_category: Assembly
 # tool_input_formats: FASTQ, FASTA
 # tool_output_formats: FASTA, GFA
@@ -28,11 +28,11 @@ RUN apt-get update && apt-get install -y \
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Install SPAdes from pre-built binary (much faster)
-RUN wget https://github.com/ablab/spades/releases/download/v3.15.5/SPAdes-3.15.5-Linux.tar.gz \
-    && tar -xzf SPAdes-3.15.5-Linux.tar.gz \
-    && cp -r SPAdes-3.15.5-Linux /usr/local/spades \
+RUN wget https://github.com/ablab/spades/releases/download/v4.2.0/SPAdes-4.2.0-Linux.tar.gz \
+    && tar -xzf SPAdes-4.2.0-Linux.tar.gz \
+    && cp -r SPAdes-4.2.0-Linux /usr/local/spades \
     && ln -sf /usr/local/spades/bin/* /usr/local/bin/ \
-    && rm -rf SPAdes-3.15.5-Linux*
+    && rm -rf SPAdes-4.2.0-Linux*
 
 # Set SPAdes environment variables
 ENV SPADES_HOME=/usr/local/spades

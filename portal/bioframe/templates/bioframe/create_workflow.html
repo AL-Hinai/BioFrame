@@ -140,29 +140,27 @@ let filteredTools = [];
 // Pre-selected tools from template
 const preSelectedTools = {{ pre_selected_tools|safe }};
 
-// Load available tools
-async function loadAvailableTools() {
+// Load available tools from Django context
+function loadAvailableTools() {
     try {
-        const response = await fetch('/tools/api/tools/');
-        if (response.ok) {
-            availableTools = await response.json();
-            filteredTools = [...availableTools];
-            renderToolsGrid();
-            
-            // Pre-select tools if template is selected
-            if (preSelectedTools && preSelectedTools.length > 0) {
-                preSelectedTools.forEach(toolName => {
-                    const tool = availableTools.find(t => t.name === toolName);
-                    if (tool) {
-                        selectTool(tool);
-                    }
-                });
-            }
-        } else {
-            console.error('Failed to load tools');
+        // Get tools from Django template context
+        const toolsData = {{ available_tools|safe }};
+        availableTools = toolsData || [];
+        filteredTools = [...availableTools];
+        renderToolsGrid();
+        
+        // Pre-select tools if template is selected
+        if (preSelectedTools && preSelectedTools.length > 0) {
+            preSelectedTools.forEach(toolName => {
+                const tool = availableTools.find(t => t.name.toLowerCase() === toolName.toLowerCase());
+                if (tool) {
+                    selectTool(tool);
+                }
+            });
         }
     } catch (error) {
         console.error('Error loading tools:', error);
+        console.log('Available tools data:', {{ available_tools|safe }});
     }
 }
 

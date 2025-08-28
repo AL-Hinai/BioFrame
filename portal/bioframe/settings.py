@@ -62,12 +62,8 @@ WSGI_APPLICATION = 'bioframe.wsgi.application'
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'bioframe'),
-        'USER': os.environ.get('POSTGRES_USER', 'bioframe'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'bioframe123'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'postgres'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -135,13 +131,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-# Redis settings
-REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
-REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+# Redis settings (disabled for local development)
+# REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+# REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
 
-# Celery settings
-CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
-CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
+# Celery settings (disabled for local development)
+# CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
+# CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
 
 # Logging
 LOGGING = {
@@ -151,7 +147,7 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': '/app/logs/django.log',
+            'filename': os.path.join(BASE_DIR, 'logs', 'django.log'),
         },
     },
     'root': {

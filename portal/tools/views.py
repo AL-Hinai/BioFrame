@@ -1,9 +1,9 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.response import Response
 import docker
 import json
 import os
@@ -44,8 +44,8 @@ def scan_tools_directory():
                     tools.append(tool_info)
     
     if not tools:
-        print(f"No tools found in {tools_dir}, using fallback list")
-        return get_fallback_tools()
+        print(f"No tools found in {tools_dir}, returning empty list")
+        return []
     
     print(f"Scanned {len(tools)} tools from directory: {tools_dir}")
     return tools
@@ -58,21 +58,27 @@ def get_fallback_tools():
             'description': 'Quality control for high throughput sequence data',
             'version': '0.11.9',
             'category': 'Quality Control',
-            'status': 'available'
+            'status': 'available',
+            'input_formats': 'FASTQ,FASTQ.GZ',
+            'output_formats': 'HTML Reports,QC Stats'
         },
         {
             'name': 'trimmomatic',
             'description': 'A flexible read trimming tool for Illumina NGS data',
             'version': '0.39',
             'category': 'Read Processing',
-            'status': 'available'
+            'status': 'available',
+            'input_formats': 'FASTQ,FASTQ.GZ',
+            'output_formats': 'Cleaned FASTQ,QC Reports'
         },
         {
             'name': 'spades',
             'description': 'Assembler for single-cell and multi-cell data',
-            'version': '3.15.5',
+            'version': '4.2.0',
             'category': 'Assembly',
-            'status': 'available'
+            'status': 'available',
+            'input_formats': 'FASTQ,FASTQ.GZ',
+            'output_formats': 'FASTA,GFA,Assembly Stats'
         },
         {
             'name': 'quast',
@@ -98,29 +104,8 @@ def get_fallback_tools():
         {
             'name': 'multiqc',
             'description': 'Aggregate results from bioinformatics analyses',
-            'version': '1.14',
-            'category': 'Quality Assessment',
-            'status': 'available'
-        },
-        {
-            'name': 'gatk',
-            'description': 'Genome Analysis Toolkit for variant discovery',
-            'version': '4.2.6.1',
-            'category': 'Variant Calling',
-            'status': 'available'
-        },
-        {
-            'name': 'bedtools',
-            'description': 'Tools for genome arithmetic and set operations',
-            'version': '2.30.0',
-            'category': 'Genome Analysis',
-            'status': 'available'
-        },
-        {
-            'name': 'pilon',
-            'description': 'Automated assembly improvement and variant calling',
-            'version': '1.24',
-            'category': 'Assembly Improvement',
+            'version': '1.16',
+            'category': 'Quality Control',
             'status': 'available'
         }
     ]
@@ -207,11 +192,6 @@ def tool_list(request):
     """List available bioinformatics tools"""
     # Auto-detect tools from the tools directory
     tools = scan_tools_directory()
-    
-    # If no tools found, fall back to hardcoded list
-    if not tools:
-        print("No tools auto-detected, using fallback list")
-        tools = get_fallback_tools()
     
     print(f"Tool list view found {len(tools)} tools")
     
@@ -304,8 +284,7 @@ def tool_detail(request, tool_name):
     context = {'tool': tool_info[tool_name]}
     return render(request, 'tools/tool_detail.html', context)
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@login_required
 def execute_tool(request, tool_name):
     """Execute a bioinformatics tool"""
     try:
@@ -314,19 +293,19 @@ def execute_tool(request, tool_name):
         
         # Validate parameters based on tool
         if not validate_tool_parameters(tool_name, parameters):
-            return Response({'error': 'Invalid parameters for tool'}, status=400)
+            return JsonResponse({'error': 'Invalid parameters for tool'}, status=400)
         
         # Execute tool using Docker
         result = run_tool_docker(tool_name, parameters)
         
-        return Response({
+        return JsonResponse({
             'success': True,
             'result': result,
             'message': f'Tool {tool_name} executed successfully'
         })
         
     except Exception as e:
-        return Response({
+        return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
@@ -427,6 +406,7 @@ def build_tool_command(tool_name, parameters):
     else:
         return ['echo', 'Tool not configured']
 
+@login_required
 def tools_api(request):
     """API endpoint to return available tools as JSON"""
     tools = scan_tools_directory()

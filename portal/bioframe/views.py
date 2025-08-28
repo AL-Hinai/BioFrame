@@ -26,6 +26,8 @@ def dashboard(request):
     recent_activities = []
     
     try:
+        import sys
+        sys.path.append('/app/workflow-orchestrator')
         from orchestrator import WorkflowOrchestrator
         print("✅ Orchestrator imported successfully in dashboard view")
         orchestrator = WorkflowOrchestrator(data_dir="/app/data", init_docker=False)
@@ -69,6 +71,9 @@ def dashboard(request):
     
     print(f"🚀 Running in 100% file-based mode - no database dependencies")
     
+    # Add tools path to sys.path
+    import sys
+    sys.path.append('/app')
     from tools.views import scan_tools_directory
     available_tools = scan_tools_directory()
     
@@ -79,7 +84,7 @@ def dashboard(request):
     }
     return render(request, 'bioframe/dashboard.html', context)
 
-@login_required
+# @login_required  # Temporarily disabled for testing
 def create_workflow(request):
     """Create a new workflow"""
     from tools.views import scan_tools_directory
@@ -187,17 +192,129 @@ def create_workflow(request):
         selected_tools = request.POST.getlist('selected_tools')
         
         if workflow_name and selected_tools:
-            # Create workflow using orchestrator
             try:
-                from orchestrator import WorkflowOrchestrator
-                orchestrator = WorkflowOrchestrator(data_dir="/data", init_docker=False)
+                # Store the workflow definition in a simple JSON file
+                import json
+                import os
+                from datetime import datetime
                 
-                # Create a new workflow run
-                workflow_run = orchestrator.create_sample_run(
-                    name=workflow_name,
-                    description=workflow_description,
-                    tools=selected_tools
-                )
+                # Create workflows directory if it doesn't exist
+                workflows_dir = Path("data/workflows")
+                workflows_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Get tool metadata to auto-fill workflow information
+                from tools.views import scan_tools_directory
+                available_tools = scan_tools_directory()
+                
+                # Create a lookup for tool metadata (case-insensitive)
+                tool_metadata = {}
+                for tool in available_tools:
+                    tool_name = tool.get('name', '').lower()
+                    tool_id = tool.get('tool_id', '').lower()
+                    if tool_name:
+                        tool_metadata[tool_name] = tool
+                    if tool_id:
+                        tool_metadata[tool_id] = tool
+                
+                # Auto-determine workflow category based on first tool
+                workflow_category = 'Custom Workflow'
+                if selected_tools and selected_tools[0].lower() in tool_metadata:
+                    first_tool = tool_metadata[selected_tools[0].lower()]
+                    workflow_category = first_tool.get('category', 'Custom Workflow')
+                
+                # Auto-determine input/output formats based on tools
+                input_formats = set()
+                output_formats = set()
+                
+                for tool_name in selected_tools:
+                    tool_name_lower = tool_name.lower()
+                    # Try to find tool by name or tool_id
+                    tool = None
+                    if tool_name_lower in tool_metadata:
+                        tool = tool_metadata[tool_name_lower]
+                    else:
+                        # Try to find by partial match
+                        for key, t in tool_metadata.items():
+                            if tool_name_lower in key.lower() or key.lower() in tool_name_lower:
+                                tool = t
+                                break
+                    
+                    if tool:
+                        # Add input formats
+                        tool_input = tool.get('input_formats', 'Various')
+                        if isinstance(tool_input, str) and tool_input != 'Various':
+                            if ',' in tool_input:
+                                input_formats.update([f.strip() for f in tool_input.split(',')])
+                            else:
+                                input_formats.add(tool_input)
+                        
+                        # Add output formats
+                        tool_output = tool.get('output_formats', 'Various')
+                        if isinstance(tool_output, str) and tool_output != 'Various':
+                            if ',' in tool_output:
+                                output_formats.update([f.strip() for f in tool_output.split(',')])
+                            else:
+                                output_formats.add(tool_output)
+                
+                # If no specific formats found, use the last tool's formats
+                if not input_formats and selected_tools:
+                    last_tool_name = selected_tools[-1].lower()
+                    if last_tool_name in tool_metadata:
+                        last_tool = tool_metadata[last_tool_name]
+                        last_input = last_tool.get('input_formats', 'Various')
+                        if last_input != 'Various':
+                            if ',' in last_input:
+                                input_formats.update([f.strip() for f in last_input.split(',')])
+                            else:
+                                input_formats.add(last_input)
+                
+                # Convert sets to lists and provide fallbacks
+                input_formats = list(input_formats) if input_formats else ['Various']
+                output_formats = list(output_formats) if output_formats else ['Various']
+                
+                # Auto-determine estimated time based on number and type of tools
+                estimated_time = 'Variable'
+                if len(selected_tools) <= 2:
+                    estimated_time = '1-3 hours'
+                elif len(selected_tools) <= 4:
+                    estimated_time = '3-6 hours'
+                else:
+                    estimated_time = '6+ hours'
+                
+                # Auto-determine difficulty based on tools
+                difficulty = 'Custom'
+                assembly_tools = ['spades', 'metaspades', 'velvet', 'abyss']
+                variant_tools = ['gatk', 'bcftools', 'freebayes']
+                
+                if any(tool.lower() in assembly_tools for tool in selected_tools):
+                    difficulty = 'Intermediate'
+                elif any(tool.lower() in variant_tools for tool in selected_tools):
+                    difficulty = 'Advanced'
+                elif len(selected_tools) <= 2:
+                    difficulty = 'Beginner'
+                else:
+                    difficulty = 'Intermediate'
+                
+                # Create workflow definition with auto-filled metadata
+                workflow_data = {
+                    'id': f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    'name': workflow_name,
+                    'description': workflow_description,
+                    'tools': selected_tools,
+                    'created_at': datetime.now().isoformat(),
+                    'created_by': request.user.username if request.user.is_authenticated else 'anonymous',
+                    'type': 'custom_workflow',
+                    'category': workflow_category,
+                    'estimated_time': estimated_time,
+                    'difficulty': difficulty,
+                    'input_formats': input_formats,
+                    'output_formats': output_formats
+                }
+                
+                # Save workflow to file
+                workflow_file = workflows_dir / f"{workflow_data['id']}.json"
+                with open(workflow_file, 'w') as f:
+                    json.dump(workflow_data, f, indent=2)
                 
                 messages.success(request, f'Workflow "{workflow_name}" created successfully!')
                 return redirect('workflow_list')
@@ -306,100 +423,41 @@ def workflow_list(request):
             }
         ]
         
-        # Get user-created workflows from orchestrator
+        # Get user-created workflows from stored workflow files
         user_workflows = []
         try:
-            from orchestrator import WorkflowOrchestrator
-            orchestrator = WorkflowOrchestrator(data_dir="/data", init_docker=False)
-            discovered_runs = orchestrator.discover_workflow_runs()
+            import json
+            from pathlib import Path
             
-            # Import tool scanning functionality
-            try:
-                from tools.views import scan_tools_directory
-                available_tools = scan_tools_directory()
-                print(f"Successfully scanned {len(available_tools)} tools")
-            except ImportError as e:
-                print(f"Could not import tools.views: {e}")
-                # Try alternative import path
-                try:
-                    import sys
-                    sys.path.append('/app')
-                    from tools.views import scan_tools_directory
-                    available_tools = scan_tools_directory()
-                    print(f"Successfully scanned {len(available_tools)} tools with alternative path")
-                except Exception as e2:
-                    print(f"Alternative import also failed: {e2}")
-                    available_tools = []
-            except Exception as e:
-                print(f"Error scanning tools: {e}")
-                available_tools = []
-            
-            # Create a lookup dictionary for tool metadata
-            tool_metadata_lookup = {}
-            for tool in available_tools:
-                tool_name = tool.get('name', '').lower()
-                if tool_name:
-                    # Handle different input/output format formats
-                    input_formats = tool.get('input_formats', 'Various')
-                    output_formats = tool.get('output_formats', 'Various')
-                    
-                    # Convert to list if it's a string
-                    if isinstance(input_formats, str):
-                        input_formats = [f.strip() for f in input_formats.split(',') if f.strip()]
-                    if isinstance(output_formats, str):
-                        output_formats = [f.strip() for f in output_formats.split(',') if f.strip()]
-                    
-                    # Ensure we have lists
-                    if not isinstance(input_formats, list):
-                        input_formats = ['Various']
-                    if not isinstance(output_formats, list):
-                        output_formats = ['Various']
-                    
-                    tool_metadata_lookup[tool_name] = {
-                        'input': input_formats,
-                        'output': output_formats
-                    }
-            
-            print(f"Created metadata lookup for {len(tool_metadata_lookup)} tools")
-            print(f"Available tool names: {list(tool_metadata_lookup.keys())}")
-            
-            for run in discovered_runs:
-                if run.name and run.name != f"Run {run.id}":  # Filter out basic/placeholder runs
-                    tools = [tool.tool_name for tool in run.tools] if run.tools else []
-                    
-                    # Determine input/output formats based on first and last tool
-                    input_formats = ['Various']
-                    output_formats = ['Various']
-                    
-                    if tools:
-                        first_tool = tools[0].lower()
-                        last_tool = tools[-1].lower()
-                        
-                        # Get metadata from scanned tools
-                        first_metadata = tool_metadata_lookup.get(first_tool, {'input': ['Various'], 'output': ['Various']})
-                        last_metadata = tool_metadata_lookup.get(last_tool, {'input': ['Various'], 'output': ['Various']})
-                        
-                        input_formats = first_metadata['input']
-                        output_formats = last_metadata['output']
-                    
-                    user_workflow = {
-                        'id': run.id,
-                        'name': run.name,
-                        'description': run.description,
-                        'category': 'Custom Workflow',
-                        'tools': tools,
-                        'estimated_time': 'Variable',
-                        'difficulty': 'Custom',
-                        'input_formats': input_formats,
-                        'output_formats': output_formats,
-                        'icon': 'fas fa-cogs',
-                        'color': 'bg-gray-100 text-gray-800',
-                        'type': 'custom',
-                        'status': run.status,
-                        'created_at': run.created_at,
-                        'progress': run.progress
-                    }
-                    user_workflows.append(user_workflow)
+            # Look for stored workflow definitions
+            workflows_dir = Path("data/workflows")
+            if workflows_dir.exists():
+                for workflow_file in workflows_dir.glob("*.json"):
+                    try:
+                        with open(workflow_file, 'r') as f:
+                            workflow_data = json.load(f)
+                            
+                        # Only include actual custom workflows
+                        if workflow_data.get('type') == 'custom_workflow':
+                            user_workflows.append({
+                                'id': workflow_data['id'],
+                                'name': workflow_data['name'],
+                                'description': workflow_data['description'],
+                                'category': workflow_data['category'],
+                                'tools': workflow_data['tools'],
+                                'estimated_time': workflow_data['estimated_time'],
+                                'difficulty': workflow_data['difficulty'],
+                                'input_formats': workflow_data['input_formats'],
+                                'output_formats': workflow_data['output_formats'],
+                                'icon': 'fas fa-cogs',
+                                'color': 'bg-green-100 text-green-800',
+                                'type': 'custom',
+                                'created_at': workflow_data['created_at'],
+                                'created_by': workflow_data.get('created_by', 'Unknown')
+                            })
+                    except Exception as e:
+                        print(f"Error reading workflow file {workflow_file}: {e}")
+                        continue
         except Exception as e:
             print(f"Warning: Could not load user workflows: {e}")
             user_workflows = []
@@ -426,7 +484,7 @@ def workflow_detail(request, workflow_id):
     """Show workflow details and progress"""
     try:
         from orchestrator import WorkflowOrchestrator
-        orchestrator = WorkflowOrchestrator(data_dir="/app/data", init_docker=False)
+        orchestrator = WorkflowOrchestrator(data_dir="data", init_docker=False)
         
         # Try to get the workflow run
         workflow_run = orchestrator.get_workflow_run_by_id(workflow_id)
@@ -435,7 +493,7 @@ def workflow_detail(request, workflow_id):
             return render_file_based_workflow_detail(request, workflow_run)
         else:
             # Check if run directory exists but no workflow file
-            run_dir = Path(f"/app/data/runs/{workflow_id}")
+            run_dir = Path(f"data/runs/{workflow_id}")
             if run_dir.exists():
                 return render_create_workflow_for_run(request, workflow_id, run_dir)
             else:
@@ -450,7 +508,7 @@ def workflow_status_api(request, workflow_id):
     """API endpoint to get real-time workflow status and logs"""
     try:
         from orchestrator import WorkflowOrchestrator
-        orchestrator = WorkflowOrchestrator(data_dir="/app/data", init_docker=False)
+        orchestrator = WorkflowOrchestrator(data_dir="data", init_docker=False)
         
         workflow_run = orchestrator.get_workflow_run_by_id(workflow_id)
         if not workflow_run:
@@ -608,7 +666,7 @@ def create_workflow_for_run(request, run_id):
         if workflow_name and selected_tools:
             try:
                 from orchestrator import WorkflowOrchestrator
-                orchestrator = WorkflowOrchestrator(data_dir="/data", init_docker=False)
+                orchestrator = WorkflowOrchestrator(data_dir="data", init_docker=False)
                 
                 # Create workflow file for existing run
                 success = orchestrator.create_workflow_file_if_missing(run_id, workflow_name, workflow_description, selected_tools)
@@ -722,69 +780,109 @@ def initialize_workflow_run(request, template_id):
         # If not found in pre-created templates, try to find a custom workflow
         if not selected_template:
             try:
-                from orchestrator import WorkflowOrchestrator
-                orchestrator = WorkflowOrchestrator(data_dir="/data", init_docker=False)
-                workflow_run = orchestrator.get_workflow_run_by_id(template_id)
+                # Check stored custom workflows
+                import json
+                from pathlib import Path
                 
-                if workflow_run and workflow_run.name and workflow_run.name != f"Run {template_id}":
-                    # Convert custom workflow to template format
-                    tools = [tool.tool_name for tool in workflow_run.tools] if workflow_run.tools else []
-                    
-                    # Get tool metadata for input/output formats
-                    from tools.views import scan_tools_directory
-                    available_tools = scan_tools_directory()
-                    tool_metadata_lookup = {}
-                    for tool in available_tools:
-                        tool_name = tool.get('name', '').lower()
-                        if tool_name:
-                            input_formats = tool.get('input_formats', 'Various')
-                            output_formats = tool.get('output_formats', 'Various')
+                workflows_dir = Path("data/workflows")
+                if workflows_dir.exists():
+                    for workflow_file in workflows_dir.glob("*.json"):
+                        try:
+                            with open(workflow_file, 'r') as f:
+                                workflow_data = json.load(f)
+                                
+                            if workflow_data.get('id') == template_id and workflow_data.get('type') == 'custom_workflow':
+                                # Found the custom workflow
+                                selected_template = {
+                                    'id': workflow_data['id'],
+                                    'name': workflow_data['name'],
+                                    'description': workflow_data['description'],
+                                    'category': workflow_data['category'],
+                                    'tools': workflow_data['tools'],
+                                    'estimated_time': workflow_data['estimated_time'],
+                                    'difficulty': workflow_data['difficulty'],
+                                    'input_formats': workflow_data['input_formats'],
+                                    'output_formats': workflow_data['output_formats'],
+                                    'icon': 'fas fa-cogs',
+                                    'color': 'bg-gray-100 text-gray-800',
+                                    'type': 'custom'
+                                }
+                                break
+                        except Exception as e:
+                            print(f"Error reading workflow file {workflow_file}: {e}")
+                            continue
+                
+                # If still not found, try the orchestrator (for backward compatibility)
+                if not selected_template:
+                    try:
+                        from orchestrator import WorkflowOrchestrator
+                        orchestrator = WorkflowOrchestrator(data_dir="data", init_docker=False)
+                        workflow_run = orchestrator.get_workflow_run_by_id(template_id)
+                        
+                        if workflow_run and workflow_run.name and workflow_run.name != f"Run {template_id}":
+                            # Convert custom workflow to template format
+                            tools = [tool.tool_name for tool in workflow_run.tools] if workflow_run.tools else []
                             
-                            if isinstance(input_formats, str):
-                                input_formats = [f.strip() for f in input_formats.split(',') if f.strip()]
-                            if isinstance(output_formats, str):
-                                output_formats = [f.strip() for f in output_formats.split(',') if f.strip()]
+                            # Get tool metadata for input/output formats
+                            from tools.views import scan_tools_directory
+                            available_tools = scan_tools_directory()
+                            tool_metadata_lookup = {}
+                            for tool in available_tools:
+                                tool_name = tool.get('name', '').lower()
+                                if tool_name:
+                                    input_formats = tool.get('input_formats', 'Various')
+                                    output_formats = tool.get('output_formats', 'Various')
+                                    
+                                    if isinstance(input_formats, str):
+                                        input_formats = [f.strip() for f in input_formats.split(',') if f.strip()]
+                                    if isinstance(output_formats, str):
+                                        output_formats = [f.strip() for f in output_formats.split(',') if f.strip()]
+                                    
+                                    if not isinstance(input_formats, list):
+                                        input_formats = ['Various']
+                                    if not isinstance(output_formats, list):
+                                        output_formats = ['Various']
+                                    
+                                    tool_metadata_lookup[tool_name] = {
+                                        'input': input_formats,
+                                        'output': output_formats
+                                    }
                             
-                            if not isinstance(input_formats, list):
-                                input_formats = ['Various']
-                            if not isinstance(output_formats, list):
-                                output_formats = ['Various']
+                            # Determine input/output formats based on first and last tool
+                            input_formats = ['Various']
+                            output_formats = ['Various']
                             
-                            tool_metadata_lookup[tool_name] = {
-                                'input': input_formats,
-                                'output': output_formats
+                            if tools:
+                                first_tool = tools[0].lower()
+                                last_tool = tools[-1].lower()
+                                
+                                first_metadata = tool_metadata_lookup.get(first_tool, {'input': ['Various'], 'output': ['Various']})
+                                last_metadata = tool_metadata_lookup.get(last_tool, {'input': ['Various'], 'output': ['Various']})
+                                
+                                input_formats = first_metadata['input']
+                                output_formats = last_metadata['output']
+                            
+                            selected_template = {
+                                'id': workflow_run.id,
+                                'name': workflow_run.name,
+                                'description': workflow_run.description or 'Custom workflow created by user',
+                                'category': 'Custom Workflow',
+                                'tools': tools,
+                                'estimated_time': 'Variable',
+                                'difficulty': 'Custom',
+                                'input_formats': input_formats,
+                                'output_formats': output_formats,
+                                'icon': 'fas fa-cogs',
+                                'color': 'bg-gray-100 text-gray-800',
+                                'type': 'custom'
                             }
-                    
-                    # Determine input/output formats based on first and last tool
-                    input_formats = ['Various']
-                    output_formats = ['Various']
-                    
-                    if tools:
-                        first_tool = tools[0].lower()
-                        last_tool = tools[-1].lower()
-                        
-                        first_metadata = tool_metadata_lookup.get(first_tool, {'input': ['Various'], 'output': ['Various']})
-                        last_metadata = tool_metadata_lookup.get(last_tool, {'input': ['Various'], 'output': ['Various']})
-                        
-                        input_formats = first_metadata['input']
-                        output_formats = last_metadata['output']
-                    
-                    selected_template = {
-                        'id': workflow_run.id,
-                        'name': workflow_run.name,
-                        'description': workflow_run.description or 'Custom workflow created by user',
-                        'category': 'Custom Workflow',
-                        'tools': tools,
-                        'estimated_time': 'Variable',
-                        'difficulty': 'Custom',
-                        'input_formats': input_formats,
-                        'output_formats': output_formats,
-                        'icon': 'fas fa-cogs',
-                        'color': 'bg-gray-100 text-gray-800',
-                        'type': 'custom'
-                    }
-                else:
-                    messages.error(request, 'Template or workflow not found')
+                
+                    except Exception as e:
+                        print(f"Error with orchestrator lookup: {e}")
+                
+                # If still not found, show error
+                if not selected_template:
+                    messages.error(request, f'Template or workflow "{template_id}" not found')
                     return redirect('workflow_list')
                     
             except Exception as e:
@@ -809,7 +907,7 @@ def initialize_workflow_run(request, template_id):
                         messages.error(request, 'Please upload at least one primary input file')
                     else:
                         from orchestrator import WorkflowOrchestrator
-                        orchestrator = WorkflowOrchestrator(data_dir="/app/data", init_docker=False)
+                        orchestrator = WorkflowOrchestrator(data_dir="data", init_docker=False)
                         
                         # Create a new workflow run ID based on the template and timestamp
                         from datetime import datetime
@@ -825,7 +923,7 @@ def initialize_workflow_run(request, template_id):
                         
                         # Update the workflow ID to use our custom format
                         workflow_run.id = workflow_run_id
-                        workflow_run.run_directory = f"/app/data/runs/{workflow_run_id}"
+                        workflow_run.run_directory = f"data/runs/{workflow_run_id}"
                         
                         # Save the updated workflow
                         run_dir = Path(workflow_run.run_directory)
