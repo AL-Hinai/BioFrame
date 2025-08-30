@@ -1,62 +1,30 @@
 #!/usr/bin/env python3
 """
 BioFrame Workflow Orchestrator
-Manages workflow execution, tool invocation, and file-based workflow management
+Manages the execution of bioinformatics workflows
 """
 
 import os
-import yaml
 import json
-import uuid
-import docker
-import logging
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Dict, Optional, Any
-from dataclasses import dataclass, asdict
-import subprocess
+import yaml
 import time
-import threading
+import shutil
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
+import uuid
+from datetime import datetime
+import subprocess
+import logging
+import traceback
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import the new dynamic logging system
+from logging_utils import DynamicWorkflowLogger
 
-@dataclass
-class ToolExecution:
-    """Represents a tool execution step"""
-    tool_name: str
-    order: int
-    status: str = 'pending'  # pending, running, completed, failed
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    execution_time: Optional[float] = None
-    config: Dict[str, Any] = None
-    error_message: Optional[str] = None
-    input_files: List[str] = None
-    output_files: List[str] = None
-    logs: List[str] = None
-
-@dataclass
-class WorkflowRun:
-    """Represents a workflow run"""
-    id: str
-    name: str
-    description: str
-    status: str  # pending, running, completed, failed
-    created_at: datetime
-    updated_at: datetime
-    progress: float = 0.0
-    tools: List[ToolExecution] = None
-    run_directory: str = None
-    template_used: bool = False
-    checkpoint_data: Dict[str, Any] = None
 
 class WorkflowOrchestrator:
-    """Main orchestrator class for managing bioinformatics workflows"""
+    """Orchestrates the execution of bioinformatics workflows"""
     
-    def __init__(self, data_dir: str = "/data", init_docker: bool = True):
-        """Initialize the orchestrator"""
+    def __init__(self, data_dir: str, init_docker: bool = True):
         self.data_dir = Path(data_dir)
         self.runs_dir = self.data_dir / "runs"
         self.logs_dir = self.data_dir / "logs"
@@ -65,908 +33,750 @@ class WorkflowOrchestrator:
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize Docker client if requested
-        self.docker_client = None
+        # Initialize Docker if requested
         if init_docker:
-            try:
-                self.docker_client = docker.from_env()
-                logger.info("Docker client initialized successfully")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Docker client: {e}")
-                logger.info("Running in file-only mode")
+            self._init_docker()
+            
+        # Setup logging
+        self._setup_logging()
         
-        logger.info(f"WorkflowOrchestrator initialized with data_dir: {self.data_dir}")
-    
-    def create_sample_run(self, name: str, description: str, tools: List[str]) -> WorkflowRun:
-        """Create a new sample run with the specified tools"""
-        run_id = str(uuid.uuid4())
-        run_dir = self.runs_dir / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create tool executions
-        tool_executions = []
-        for i, tool_name in enumerate(tools):
-            tool_exec = ToolExecution(
-                tool_name=tool_name,
-                order=i + 1,
-                status='pending',
-                config={},
-                input_files=[],
-                output_files=[],
-                logs=[]
-            )
-            tool_executions.append(tool_exec)
-        
-        # Create workflow run
-        now = datetime.now(timezone.utc)
-        workflow_run = WorkflowRun(
-            id=run_id,
-            name=name,
-            description=description,
-            status='pending',
-            created_at=now,
-            updated_at=now,
-            progress=0.0,
-            tools=tool_executions,
-            run_directory=str(run_dir),
-            template_used=False,
-            checkpoint_data={}
-        )
-        
-        # Save workflow file
-        workflow_file = run_dir / "workflow.yaml"
-        self._save_unified_workflow_file(workflow_run, workflow_file)
-        
-        logger.info(f"Created sample run: {run_id} with {len(tools)} tools")
-        return workflow_run
-    
-    def execute_pipeline_workflow(self, run_id: str, primary_files: List[str], reference_files: Dict[str, str] = None) -> bool:
-        """Execute a pipeline workflow where each tool's output becomes the next tool's input"""
+    def _init_docker(self):
+        """Initialize Docker environment"""
         try:
-            workflow_run = self.get_workflow_run_by_id(run_id)
-            if not workflow_run:
-                logger.error(f"Workflow run {run_id} not found")
-                return False
+            # Check if Docker is available
+            result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                self.logger.info(f"✅ Docker available: {result.stdout.strip()}")
+            else:
+                self.logger.warning("⚠️  Docker not available")
+        except FileNotFoundError:
+            self.logger.warning("⚠️  Docker command not found")
+            
+    def _setup_logging(self):
+        """Setup basic logging for the orchestrator"""
+        # Create orchestrator logger
+        self.logger = logging.getLogger("orchestrator")
+        self.logger.setLevel(logging.INFO)
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
+        
+        # Prevent duplicate logs
+        self.logger.propagate = False
+        
+        # Initialize tool executor
+        self.tool_executor = ToolExecutor(self.logger)
+        
+        # Initialize issues logger
+        self.issues_logger = IssuesLogger()
+        
+    def create_sample_run(self, run_id: str, workflow_name: str, tools: List[str], 
+                          input_files: List[str], output_dir: str) -> Dict[str, Any]:
+        """Create a new workflow run with sample data"""
+        try:
+            # Create run directory
+            run_dir = self.runs_dir / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create workflow structure
+            workflow = {
+                "workflow_id": run_id,
+                "workflow_name": workflow_name,
+                "tools": tools,
+                "input_files": input_files,
+                "output_directory": output_dir,
+                "created_at": datetime.now().isoformat(),
+                "status": "created"
+            }
+            
+            # Save workflow definition
+            workflow_file = run_dir / "workflow.yaml"
+            with open(workflow_file, 'w') as f:
+                yaml.dump(workflow, f, default_flow_style=False)
+                
+            self.logger.info(f"✅ Created workflow run: {run_id}")
+            return workflow
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to create workflow run: {e}")
+            raise
+            
+    def execute_pipeline_workflow(self, run_id: str, input_files: List[str], 
+                                 workflow_config: Dict[str, Any]) -> bool:
+        """Execute a complete pipeline workflow with comprehensive logging"""
+        start_time = time.time()
+        
+        try:
+            # Load workflow definition
+            workflow_file = self.runs_dir / run_id / "workflow.yaml"
+            if not workflow_file.exists():
+                raise FileNotFoundError(f"Workflow file not found: {workflow_file}")
+                
+            with open(workflow_file, 'r') as f:
+                workflow = yaml.safe_load(f)
+                
+            # Initialize dynamic logger and executor
+            workflow_logger = DynamicWorkflowLogger(run_id, workflow.get("workflow_name", "Unknown"), str(self.data_dir))
+            tool_executor = self.tool_executor  # Use the orchestrator's tool executor
+            
+            # Log workflow start
+            tools = workflow.get("tools", [])
+            workflow_logger.log_workflow_start(workflow.get("workflow_name", "Unknown"), tools, len(tools))
+            
+            # Handle input files - check if they're already in the inputs directory
+            inputs_dir = self.runs_dir / run_id / "inputs"
+            inputs_dir.mkdir(exist_ok=True)
+            
+            copied_files = []
+            for input_file in input_files:
+                input_path = Path(input_file)
+                if input_path.exists():
+                    # Check if file is already in inputs directory
+                    if str(input_path).startswith(str(inputs_dir)):
+                        # File is already in inputs directory, use it directly
+                        copied_files.append(str(input_path))
+                        workflow_logger.log_step_progress(1, "file_copy", f"Using existing file: {input_path}")
+                    else:
+                        # Copy file to inputs directory
+                        dest_file = inputs_dir / input_path.name
+                        shutil.copy2(input_file, dest_file)
+                        copied_files.append(str(dest_file))
+                        workflow_logger.log_step_progress(1, "file_copy", f"Copied {input_file} to {dest_file}")
+                else:
+                    workflow_logger.log_step_progress(1, "file_copy", f"Input file not found: {input_file}", "WARNING")
+                    
+            # Execute each tool in the pipeline
+            current_inputs = copied_files
+            step_number = 1
+            
+            for tool_name in tools:
+                try:
+                    # Create tool output directory
+                    tool_output_dir = self.runs_dir / run_id / f"step_{step_number}_{tool_name}"
+                    tool_output_dir.mkdir(exist_ok=True)
+                    
+                    # Log step start
+                    workflow_logger.log_step_start(step_number, tool_name, current_inputs, str(tool_output_dir))
+                    
+                    # Execute tool
+                    result = tool_executor.execute_tool(tool_name, current_inputs, str(tool_output_dir))
+                    
+                    # Log step completion
+                    workflow_logger.log_step_completion(step_number, tool_name, result)
+                    
+                    if result.success:
+                        # Update inputs for next step
+                        current_inputs = result.output_files
+                        step_number += 1
+                        
+                        # Log progress
+                        workflow_logger.log_step_progress(step_number-1, tool_name, 
+                            f"Tool completed successfully. Output files: {len(result.output_files)}")
+                    else:
+                        # Tool failed
+                        workflow_logger.log_step_progress(step_number, tool_name, 
+                            f"Tool failed: {result.error_message}", "ERROR")
+                        raise RuntimeError(f"Tool {tool_name} failed: {result.error_message}")
+                    
+                except Exception as e:
+                    workflow_logger.log_error(e, f"Step {step_number} execution")
+                    workflow_logger.log_workflow_completion(False, time.time() - start_time)
+                    
+                    # Save enhanced issues analysis for failed workflow
+                    run_dir = self.runs_dir / run_id
+                    workflow_logger.save_enhanced_issues_log(run_id, run_dir)
+                    
+                    workflow_logger.cleanup()
+                    return False
+                    
+            # Workflow completed successfully
+            total_time = time.time() - start_time
+            workflow_logger.log_workflow_completion(True, total_time)
+            
+            # Save enhanced issues analysis
+            run_dir = self.runs_dir / run_id
+            workflow_logger.save_enhanced_issues_log(run_id, run_dir)
             
             # Update workflow status
-            workflow_run.status = 'running'
-            workflow_run.updated_at = datetime.now(timezone.utc)
+            self._update_workflow_status(run_id, "completed", total_time)
             
-            # Create input directory for the first tool
-            run_dir = Path(workflow_run.run_directory)
-            input_dir = run_dir / "input"
-            input_dir.mkdir(exist_ok=True)
+            # Cleanup logger
+            workflow_logger.cleanup()
             
-            # Copy primary files to input directory
-            current_input_files = []
-            for file_path in primary_files:
-                file_path_obj = Path(file_path)
-                if file_path_obj.exists():
-                    # Check if we need to copy the file (avoid copying to same location)
-                    if str(file_path_obj.parent) == str(input_dir):
-                        # File is already in the input directory
-                        current_input_files.append(str(file_path_obj))
-                        logger.info(f"File already in input directory: {file_path}")
-                    else:
-                        # Copy file to input directory
-                        dest_path = input_dir / file_path_obj.name
-                        import shutil
-                        shutil.copy2(file_path_obj, dest_path)
-                        current_input_files.append(str(dest_path))
-                        logger.info(f"Copied input file: {file_path} -> {dest_path}")
-                else:
-                    logger.warning(f"Input file not found: {file_path}")
-            
-            if not current_input_files:
-                logger.error("No valid input files found")
-                return False
-            
-            # Execute tools sequentially in pipeline
-            for i, tool_exec in enumerate(workflow_run.tools):
-                try:
-                    logger.info(f"🔄 Executing pipeline step {i+1}/{len(workflow_run.tools)}: {tool_exec.tool_name}")
-                    
-                    # Update tool status
-                    tool_exec.status = 'running'
-                    tool_exec.started_at = datetime.now(timezone.utc)
-                    tool_exec.input_files = current_input_files.copy()
-                    
-                    # Create tool-specific directory
-                    tool_dir = run_dir / f"step_{tool_exec.order}_{tool_exec.tool_name}"
-                    tool_dir.mkdir(exist_ok=True)
-                    
-                    # Execute the tool
-                    success, output_files = self._execute_tool(
-                        tool_exec.tool_name, 
-                        current_input_files, 
-                        tool_dir,
-                        reference_files
-                    )
-                    
-                    if success:
-                        tool_exec.status = 'completed'
-                        tool_exec.completed_at = datetime.now(timezone.utc)
-                        tool_exec.output_files = output_files
-                        tool_exec.execution_time = (tool_exec.completed_at - tool_exec.started_at).total_seconds()
-                        
-                        # Update progress
-                        workflow_run.progress = ((i + 1) / len(workflow_run.tools)) * 100
-                        
-                        # For quality control pipelines: preserve original input files for tools that need them
-                        if i < len(workflow_run.tools) - 1:  # Not the last tool
-                            next_tool = workflow_run.tools[i+1].tool_name
-                            
-                            # Quality control tools need the original input files, not the previous tool's output
-                            if next_tool in ['trimmomatic', 'spades', 'bwa']:
-                                # Get the original input files from the workflow run
-                                original_input_dir = Path(workflow_run.run_directory) / "input"
-                                if original_input_dir.exists():
-                                    original_files = [str(f) for f in original_input_dir.glob("*.fastq*")]
-                                    if original_files:
-                                        current_input_files = original_files
-                                        logger.info(f"✅ Tool {tool_exec.tool_name} completed. Using original input files for {next_tool}: {original_files}")
-                                    else:
-                                        current_input_files = output_files.copy()
-                                        logger.info(f"✅ Tool {tool_exec.tool_name} completed. No original files found, using output files for {next_tool}: {output_files}")
-                                else:
-                                    current_input_files = output_files.copy()
-                                    logger.info(f"✅ Tool {tool_exec.tool_name} completed. No input directory, using output files for {next_tool}: {output_files}")
-                            else:
-                                # For other tools, use the output files as input
-                                current_input_files = output_files.copy()
-                                logger.info(f"✅ Tool {tool_exec.tool_name} completed. Output files will be used as input for next tool: {next_tool}")
-                        else:
-                            logger.info(f"🎉 Final tool {tool_exec.tool_name} completed. Pipeline finished!")
-                        
-                    else:
-                        tool_exec.status = 'failed'
-                        tool_exec.error_message = f"Tool execution failed"
-                        workflow_run.status = 'failed'
-                        logger.error(f"❌ Tool {tool_exec.tool_name} failed")
-                        return False
-                    
-                    # Save workflow state after each tool
-                    self._save_unified_workflow_file(workflow_run, run_dir / "workflow.yaml")
-                    
-                except Exception as e:
-                    tool_exec.status = 'failed'
-                    tool_exec.error_message = str(e)
-                    workflow_run.status = 'failed'
-                    logger.error(f"❌ Error executing tool {tool_exec.tool_name}: {e}")
-                    return False
-            
-            # Pipeline completed successfully
-            workflow_run.status = 'completed'
-            workflow_run.updated_at = datetime.now(timezone.utc)
-            workflow_run.progress = 100.0
-            
-            # Save final workflow state
-            self._save_unified_workflow_file(workflow_run, run_dir / "workflow.yaml")
-            
-            logger.info(f"🎉 Pipeline workflow {run_id} completed successfully!")
+            self.logger.info(f"🎉 Workflow {run_id} completed successfully in {total_time:.2f} seconds")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Pipeline execution failed: {e}")
-            return False
-    
-    def _execute_tool(self, tool_name: str, input_files: List[str], output_dir: Path, reference_files: Dict[str, str] = None) -> tuple[bool, List[str]]:
-        """Execute a single tool and return success status and output files"""
-        try:
-            logger.info(f"Executing tool: {tool_name}")
-            logger.info(f"Input files: {input_files}")
-            logger.info(f"Output directory: {output_dir}")
+            total_time = time.time() - start_time
+            self.logger.error(f"❌ Workflow {run_id} failed: {e}")
             
-            # Create output directory
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Route to appropriate tool execution method
-            if tool_name == 'fastqc':
-                return self._execute_fastqc(input_files, output_dir)
-            elif tool_name == 'trimmomatic':
-                return self._execute_trimmomatic(input_files, output_dir)
-            elif tool_name == 'multiqc':
-                return self._execute_multiqc(input_files, output_dir)
-            elif tool_name == 'spades':
-                return self._execute_spades(input_files, output_dir)
-            elif tool_name == 'quast':
-                return self._execute_quast(input_files, output_dir)
-            elif tool_name == 'bwa':
-                return self._execute_bwa(input_files, output_dir, reference_files)
-            elif tool_name == 'samtools':
-                return self._execute_samtools(input_files, output_dir)
-            elif tool_name == 'gatk':
-                return self._execute_gatk(input_files, output_dir)
-            else:
-                # Generic tool execution
-                return self._execute_generic_tool(tool_name, input_files, output_dir)
-                
-        except Exception as e:
-            logger.error(f"Error executing tool {tool_name}: {e}")
-            return False, []
-    
-    def _execute_fastqc(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute FastQC quality control using Docker"""
-        try:
-            logger.info(f"Running FastQC on {len(input_files)} input files")
-            
-            # Ensure output_dir is a Path object
-            if isinstance(output_dir, str):
-                output_dir = Path(output_dir)
-            
-            # Create output directory
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_files = []
-            for input_file in input_files:
-                input_path = Path(input_file)
-                base_name = input_path.stem
-                
-                # Convert container paths to absolute host paths for Docker volume mounting
-                # The orchestrator container has ./data:/data mounted, but we need absolute host paths
-                # Since the orchestrator runs docker commands from the host context, we need absolute paths
-                import os
-                # Get the absolute host path by replacing /data with the actual host project directory
-                # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
-                host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
-                host_input_dir = str(input_path.parent).replace('/data', host_project_dir + '/data')
-                host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
-                
-                # Run FastQC using Docker with correct host paths
-                cmd = [
-                    "docker", "run", "--rm",
-                    "-v", f"{host_input_dir}:/input",
-                    "-v", f"{host_output_dir}:/output",
-                    "-w", "/output",
-                    "bioframe-fastqc",
-                    "fastqc", "-o", "/output", f"/input/{input_path.name}"
-                ]
-                
-                logger.info(f"Executing: {' '.join(cmd)}")
-                
-                # Execute the command
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                
-                if result.returncode == 0:
-                    # Find generated output files
-                    html_files = list(output_dir.glob("*_fastqc.html"))
-                    zip_files = list(output_dir.glob("*_fastqc.zip"))
-                    
-                    output_files.extend([str(f) for f in html_files + zip_files])
-                    logger.info(f"FastQC completed successfully for {input_path.name}")
-                else:
-                    logger.error(f"FastQC failed for {input_path.name}: {result.stderr}")
-                    return False, []
-            
-            logger.info(f"FastQC completed. Output files: {output_files}")
-            return True, output_files
-            
-        except subprocess.TimeoutExpired:
-            logger.error("FastQC execution timed out")
-            return False, []
-        except Exception as e:
-            logger.error(f"FastQC execution failed: {e}")
-            return False, []
-    
-    def _execute_trimmomatic(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute Trimmomatic read trimming using Docker"""
-        try:
-            logger.info(f"Running Trimmomatic on {len(input_files)} input files")
-            
-            # Ensure output_dir is a Path object
-            if isinstance(output_dir, str):
-                output_dir = Path(output_dir)
-            
-            # Create output directory
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_files = []
-            for input_file in input_files:
-                input_path = Path(input_file)
-                base_name = input_path.stem
-                
-                # Convert container paths to absolute host paths for Docker volume mounting
-                # The orchestrator container has ./data:/data mounted, but we need absolute host paths
-                # Since the orchestrator runs docker commands from the host context, we need absolute paths
-                import os
-                # Get the absolute host path by replacing /data with the actual host project directory
-                # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
-                host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
-                host_input_dir = str(input_path.parent).replace('/data', host_project_dir + '/data')
-                host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
-                
-                # Run Trimmomatic using Docker with correct host paths
-                cmd = [
-                    "docker", "run", "--rm",
-                    "-v", f"{host_input_dir}:/input",
-                    "-v", f"{host_output_dir}:/output",
-                    "-w", "/output",
-                    "bioframe-trimmomatic",
-                    "trimmomatic", "PE",
-                    f"/input/{input_path.name}",
-                    "/dev/null",  # Single-end mode for now
-                    f"{base_name}_trimmed.fastq",
-                    "ILLUMINACLIP:TruSeq3-SE:2:30:10",
-                    "LEADING:3",
-                    "TRAILING:3",
-                    "SLIDINGWINDOW:4:15",
-                    "MINLEN:36"
-                ]
-                
-                logger.info(f"Executing: {' '.join(cmd)}")
-                
-                # Execute the command
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-                
-                if result.returncode == 0:
-                    # Find generated output files
-                    trimmed_files = list(output_dir.glob("*_trimmed.fastq"))
-                    log_files = list(output_dir.glob("*.log"))
-                    
-                    output_files.extend([str(f) for f in trimmed_files + log_files])
-                    logger.info(f"Trimmomatic completed successfully for {input_path.name}")
-                else:
-                    logger.error(f"Trimmomatic failed for {input_path.name}: {result.stderr}")
-                    return False, []
-            
-            logger.info(f"Trimmomatic completed. Output files: {output_files}")
-            return True, output_files
-            
-        except subprocess.TimeoutExpired:
-            logger.error("Trimmomatic execution timed out")
-            return False, []
-        except Exception as e:
-            logger.error(f"Trimmomatic execution failed: {e}")
-            return False, []
-    
-    def _execute_multiqc(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute MultiQC report generation using Docker"""
-        try:
-            logger.info(f"Running MultiQC on {len(input_files)} input files")
-            
-            # Ensure output_dir is a Path object
-            if isinstance(output_dir, str):
-                output_dir = Path(output_dir)
-            
-            # Create output directory
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Convert container paths to absolute host paths for Docker volume mounting
-            # The orchestrator container has ./data:/data mounted, but we need absolute host paths
-            # Since the orchestrator runs docker commands from the host context, we need absolute paths
-            import os
-            # Get the absolute host path by replacing /data with the actual host project directory
-            # The host project directory is /run/media/msalim/Mass Storage/Work File/Projects/BioFrame
-            host_project_dir = "/run/media/msalim/Mass Storage/Work File/Projects/BioFrame"
-            host_output_dir = str(output_dir).replace('/data', host_project_dir + '/data')
-            
-            # Run MultiQC using Docker with correct host paths
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{host_output_dir}:/output",
-                "-w", "/output",
-                "bioframe-multiqc",
-                "multiqc", ".",
-                "-o", "/output"
-            ]
-            
-            logger.info(f"Executing: {' '.join(cmd)}")
-            
-            # Execute the command
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            
-            if result.returncode == 0:
-                # Find generated output files
-                html_files = list(output_dir.glob("multiqc_report.html"))
-                data_files = list(output_dir.glob("multiqc_data"))
-                
-                output_files = [str(f) for f in html_files + data_files]
-                logger.info(f"MultiQC completed successfully. Output files: {output_files}")
-                return True, output_files
-            else:
-                logger.error(f"MultiQC failed: {result.stderr}")
-                return False, []
-            
-        except subprocess.TimeoutExpired:
-            logger.error("MultiQC execution timed out")
-            return False, []
-        except Exception as e:
-            logger.error(f"MultiQC execution failed: {e}")
-            return False, []
-    
-    def _execute_spades(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute SPAdes assembly"""
-        try:
-            # Simulate SPAdes execution
-            output_files = []
-            
-            # Assembly outputs
-            contigs_file = output_dir / "contigs.fasta"
-            scaffolds_file = output_dir / "scaffolds.fasta"
-            assembly_graph = output_dir / "assembly_graph.fastg"
-            
-            # Create dummy output files
-            contigs_file.write_text(">contig1\nATCGATCGATCG\n>contig2\nGCTAGCTAGCTA")
-            scaffolds_file.write_text(">scaffold1\nATCGATCGATCGNNNGCTAGCTAGCTA")
-            assembly_graph.write_text("SPAdes assembly graph content")
-            
-            output_files.extend([str(contigs_file), str(scaffolds_file), str(assembly_graph)])
-            
-            logger.info(f"SPAdes completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"SPAdes execution failed: {e}")
-            return False, []
-    
-    def _execute_quast(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute QUAST quality assessment"""
-        try:
-            # Simulate QUAST execution
-            output_files = []
-            
-            # QUAST outputs
-            report_file = output_dir / "quast_report.txt"
-            html_report = output_dir / "quast_report.html"
-            
-            # Create dummy output files
-            report_file.write_text("QUAST Quality Assessment Report\nAssembly Statistics\nContigs: 100\nN50: 1000")
-            html_report.write_text("<html><body><h1>QUAST Report</h1></body></html>")
-            
-            output_files.extend([str(report_file), str(html_report)])
-            
-            logger.info(f"QUAST completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"QUAST execution failed: {e}")
-            return False, []
-    
-    def _execute_bwa(self, input_files: List[str], output_dir: Path, reference_files: Dict[str, str] = None) -> tuple[bool, List[str]]:
-        """Execute BWA alignment"""
-        try:
-            # Simulate BWA execution
-            output_files = []
-            
-            # BWA outputs
-            sam_file = output_dir / "aligned.sam"
-            bam_file = output_dir / "aligned.bam"
-            
-            # Create dummy output files
-            sam_file.write_text("@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:chr1\tLN:1000\nread1\t0\tchr1\t1\t60\t100M\t*\t0\t0\tATCGATCGATCG")
-            bam_file.write_text("BAM file content (binary)")
-            
-            output_files.extend([str(sam_file), str(bam_file)])
-            
-            logger.info(f"BWA completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"BWA execution failed: {e}")
-            return False, []
-    
-    def _execute_samtools(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute SAMtools processing"""
-        try:
-            # Simulate SAMtools execution
-            output_files = []
-            
-            # SAMtools outputs
-            sorted_bam = output_dir / "sorted.bam"
-            index_file = output_dir / "sorted.bam.bai"
-            
-            # Create dummy output files
-            sorted_bam.write_text("Sorted BAM file content")
-            index_file.write_text("BAM index content")
-            
-            output_files.extend([str(sorted_bam), str(index_file)])
-            
-            logger.info(f"SAMtools completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"SAMtools execution failed: {e}")
-            return False, []
-    
-    def _execute_gatk(self, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute GATK variant calling"""
-        try:
-            # Simulate GATK execution
-            output_files = []
-            
-            # GATK outputs
-            vcf_file = output_dir / "variants.vcf"
-            log_file = output_dir / "gatk.log"
-            
-            # Create dummy output files
-            vcf_file.write_text("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchr1\t100\t.\tA\tT\t100\tPASS\tDP=50")
-            log_file.write_text("GATK execution log")
-            
-            output_files.extend([str(vcf_file), str(log_file)])
-            
-            logger.info(f"GATK completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"GATK execution failed: {e}")
-            return False, []
-    
-    def _execute_generic_tool(self, tool_name: str, input_files: List[str], output_dir: Path) -> tuple[bool, List[str]]:
-        """Execute a generic tool"""
-        try:
-            # Simulate generic tool execution
-            output_files = []
-            
-            # Generic outputs
-            output_file = output_dir / f"{tool_name}_output.txt"
-            log_file = output_dir / f"{tool_name}.log"
-            
-            # Create dummy output files
-            output_file.write_text(f"Output from {tool_name} tool")
-            log_file.write_text(f"Log from {tool_name} tool execution")
-            
-            output_files.extend([str(output_file), str(log_file)])
-            
-            logger.info(f"{tool_name} completed. Output files: {output_files}")
-            return True, output_files
-            
-        except Exception as e:
-            logger.error(f"{tool_name} execution failed: {e}")
-            return False, []
-    
-    def _save_unified_workflow_file(self, workflow_run: WorkflowRun, workflow_file: Path):
-        """Save the unified workflow.yaml file with everything in one place"""
-        workflow_data = {
-            'id': workflow_run.id,
-            'name': workflow_run.name,
-            'description': workflow_run.description,
-            'created_at': workflow_run.created_at.isoformat(),
-            'status': workflow_run.status,
-            'progress': workflow_run.progress,
-            'workflow_pipeline': {
-                'total_steps': len(workflow_run.tools),
-                'current_step': 0,
-                'steps': []
-            },
-            'tools': [],
-            'file_references': {
-                'inputs': [],
-                'outputs': {},
-                'logs': []
-            },
-            'execution_status': {
-                'started_at': None,
-                'completed_at': None,
-                'checkpoint_data': workflow_run.checkpoint_data or {}
-            },
-            'metadata': {
-                'version': '2.0',
-                'created_by': 'BioFrame Orchestrator (Unified)',
-                'last_updated': datetime.now().isoformat(),
-                'format': 'unified_workflow'
+            # Enhanced crash logging with detailed diagnostics
+            crash_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "last_completed_step": step_number - 1 if 'step_number' in locals() else 0,
+                "last_tool": tool_name if 'tool_name' in locals() else "unknown",
+                "execution_time": total_time,
+                "stack_trace": traceback.format_exc(),
+                "workflow_state": {
+                    "total_steps": total_steps if 'total_steps' in locals() else 0,
+                    "completed_steps": step_number - 1 if 'step_number' in locals() else 0,
+                    "current_inputs": current_inputs if 'current_inputs' in locals() else [],
+                    "last_output_dir": output_dir if 'output_dir' in locals() else "unknown"
+                }
             }
-        }
-        
-        # Add tool information
-        for tool_exec in workflow_run.tools:
-            tool_data = {
-                'tool_name': tool_exec.tool_name,
-                'order': tool_exec.order,
-                'status': tool_exec.status,
-                'started_at': tool_exec.started_at.isoformat() if tool_exec.started_at else None,
-                'completed_at': tool_exec.completed_at.isoformat() if tool_exec.completed_at else None,
-                'execution_time': tool_exec.execution_time,
-                'config': tool_exec.config or {},
-                'input_files': tool_exec.input_files or [],
-                'output_files': tool_exec.output_files or [],
-                'logs': tool_exec.logs or []
-            }
-            workflow_data['tools'].append(tool_data)
             
-            # Add to pipeline steps
-            step_data = {
-                'order': tool_exec.order,
-                'tool': tool_exec.tool_name,
-                'name': f"Step {tool_exec.order}: {tool_exec.tool_name}",
-                'status': tool_exec.status,
-                'started_at': tool_data['started_at'],
-                'completed_at': tool_data['completed_at'],
-                'execution_time': tool_exec.execution_time,
-                'error_message': tool_exec.error_message,
-                'config': tool_exec.config or {},
-                'dependencies': []
-            }
-            workflow_data['workflow_pipeline']['steps'].append(step_data)
-        
-        # Save to file
-        with open(workflow_file, 'w') as f:
-            yaml.dump(workflow_data, f, default_flow_style=False, indent=2)
-        
-        logger.info(f"Created unified workflow.yaml: {workflow_file}")
-        logger.info(f"   📊 Contains: {len(workflow_data['workflow_pipeline']['steps'])} steps, {len(workflow_data['tools'])} tools")
-    
-    def discover_workflow_runs(self) -> List[WorkflowRun]:
-        """Discover all workflow runs from the file system"""
-        runs = []
-        
-        if not self.runs_dir.exists():
-            logger.warning(f"Runs directory does not exist: {self.runs_dir}")
-            return runs
-        
-        for run_dir in self.runs_dir.iterdir():
-            if not run_dir.is_dir():
-                continue
+            # Log detailed crash information
+            self.logger.error(f"💥 ORCHESTRATOR CRASH DETAILS:")
+            self.logger.error(f"   Last completed step: {crash_details['last_completed_step']}")
+            self.logger.error(f"   Last tool attempted: {crash_details['last_tool']}")
+            self.logger.error(f"   Execution time: {total_time:.2f} seconds")
+            self.logger.error(f"   Error type: {crash_details['error_type']}")
+            self.logger.error(f"   Error message: {crash_details['error_message']}")
+            self.logger.error(f"   Stack trace: {crash_details['stack_trace']}")
             
-            run_id = run_dir.name
-            
-            # Try to find workflow.yaml first
-            workflow_file = run_dir / "workflow.yaml"
-            if workflow_file.exists():
-                try:
-                    workflow_run = self._load_workflow_from_file(workflow_file)
-                    if workflow_run:
-                        runs.append(workflow_run)
-                        continue
-                except Exception as e:
-                    logger.warning(f"Failed to load workflow.yaml from {run_dir}: {e}")
-            
-            # Fallback to main_sample.yaml (legacy)
-            main_sample_file = run_dir / "main_sample.yaml"
-            if main_sample_file.exists():
-                try:
-                    workflow_run = self._convert_legacy_sample_file(main_sample_file)
-                    if workflow_run:
-                        runs.append(workflow_run)
-                        continue
-                except Exception as e:
-                    logger.warning(f"Failed to convert legacy main_sample.yaml from {run_dir}: {e}")
-            
-            # If no workflow file found, create a basic run object
-            logger.info(f"No workflow file found for run {run_id}, creating basic run object")
-            basic_run = WorkflowRun(
-                id=run_id,
-                name=f"Run {run_id}",
-                description=f"Run from directory {run_dir}",
-                status='unknown',
-                created_at=datetime.fromtimestamp(run_dir.stat().st_ctime, tz=timezone.utc),
-                updated_at=datetime.fromtimestamp(run_dir.stat().st_mtime, tz=timezone.utc),
-                progress=0.0,
-                tools=[],
-                run_directory=str(run_dir),
-                template_used=False
-            )
-            runs.append(basic_run)
-        
-        logger.info(f"Discovered {len(runs)} workflow runs from file system")
-        return runs
-    
-    def _load_workflow_from_file(self, workflow_file: Path) -> Optional[WorkflowRun]:
-        """Load a workflow run from a workflow.yaml file"""
-        try:
-            with open(workflow_file, 'r') as f:
-                data = yaml.safe_load(f)
-            
-            # Parse tools
-            tools = []
-            if 'tools' in data:
-                for tool_data in data['tools']:
-                    tool_exec = ToolExecution(
-                        tool_name=tool_data.get('tool_name', 'unknown'),
-                        order=tool_data.get('order', 0),
-                        status=tool_data.get('status', 'pending'),
-                        started_at=self._parse_datetime(tool_data.get('started_at')),
-                        completed_at=self._parse_datetime(tool_data.get('completed_at')),
-                        execution_time=tool_data.get('execution_time'),
-                        config=tool_data.get('config', {}),
-                        error_message=tool_data.get('error_message'),
-                        input_files=tool_data.get('input_files', []),
-                        output_files=tool_data.get('output_files', []),
-                        logs=tool_data.get('logs', [])
-                    )
-                    tools.append(tool_exec)
-            
-            # Create workflow run
-            workflow_run = WorkflowRun(
-                id=data.get('id', 'unknown'),
-                name=data.get('name', 'Unnamed Workflow'),
-                description=data.get('description', 'No description'),
-                status=data.get('status', 'unknown'),
-                created_at=self._parse_datetime(data.get('created_at')),
-                updated_at=self._parse_datetime(data.get('updated_at', data.get('created_at'))),
-                progress=data.get('progress', 0.0),
-                tools=tools,
-                run_directory=str(workflow_file.parent),
-                template_used=data.get('template_used', False),
-                checkpoint_data=data.get('execution_status', {}).get('checkpoint_data', {})
-            )
-            
-            return workflow_run
-            
-        except Exception as e:
-            logger.error(f"Failed to load workflow from {workflow_file}: {e}")
-            return None
-    
-    def _convert_legacy_sample_file(self, sample_file: Path) -> Optional[WorkflowRun]:
-        """Convert a legacy main_sample.yaml to the new format"""
-        try:
-            with open(sample_file, 'r') as f:
-                data = yaml.safe_load(f)
-            
-            # Extract basic information
-            run_id = sample_file.parent.name
-            name = data.get('sample_name', f'Legacy Run {run_id}')
-            description = data.get('description', 'Converted from legacy format')
-            
-            # Create basic workflow run
-            workflow_run = WorkflowRun(
-                id=run_id,
-                name=name,
-                description=description,
-                status='completed',  # Assume completed for legacy runs
-                created_at=datetime.fromtimestamp(sample_file.stat().st_ctime, tz=timezone.utc),
-                updated_at=datetime.fromtimestamp(sample_file.stat().st_mtime, tz=timezone.utc),
-                progress=100.0,
-                tools=[],
-                run_directory=str(sample_file.parent),
-                template_used=True
-            )
-            
-            # Convert to new format and save
-            workflow_file = sample_file.parent / "workflow.yaml"
-            self._save_unified_workflow_file(workflow_run, workflow_file)
-            
-            logger.info(f"Converted legacy sample file to workflow.yaml: {workflow_file}")
-            return workflow_run
-            
-        except Exception as e:
-            logger.error(f"Failed to convert legacy sample file {sample_file}: {e}")
-            return None
-    
-    def _parse_datetime(self, dt_str: str) -> Optional[datetime]:
-        """Parse datetime string to datetime object"""
-        if not dt_str:
-            return None
-        
-        try:
-            # Handle ISO format
-            if 'T' in dt_str:
-                return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-            # Handle other formats
-            return datetime.fromisoformat(dt_str)
-        except Exception:
+            # Try to log completion if logger exists
             try:
-                # Try parsing as timestamp
-                return datetime.fromtimestamp(float(dt_str), tz=timezone.utc)
-            except Exception:
-                logger.warning(f"Could not parse datetime: {dt_str}")
-                return None
-    
-    def get_workflow_run_by_id(self, run_id: str) -> Optional[WorkflowRun]:
-        """Get a specific workflow run by ID"""
-        run_dir = self.runs_dir / run_id
-        if not run_dir.exists():
-            logger.warning(f"Run directory not found: {run_dir}")
-            return None
+                if 'workflow_logger' in locals():
+                    workflow_logger.log_workflow_completion(False, total_time)
+                    
+                    # Save enhanced issues analysis for failed workflow with crash details
+                    run_dir = self.runs_dir / run_id
+                    workflow_logger.save_enhanced_issues_log(run_id, run_dir, crash_details)
+                    
+                    workflow_logger.cleanup()
+            except Exception as log_error:
+                self.logger.error(f"Failed to save crash logs: {log_error}")
+                
+            # Update workflow status
+            self._update_workflow_status(run_id, "failed", total_time)
+            
+            return False
+            
+    def _update_workflow_status(self, run_id: str, status: str, execution_time: float):
+        """Update workflow status in the workflow file"""
+        try:
+            workflow_file = self.runs_dir / run_id / "workflow.yaml"
+            if workflow_file.exists():
+                with open(workflow_file, 'r') as f:
+                    workflow = yaml.safe_load(f)
+                    
+                workflow["status"] = status
+                workflow["execution_time"] = execution_time
+                workflow["completed_at"] = datetime.now().isoformat()
+                
+                with open(workflow_file, 'w') as f:
+                    yaml.dump(workflow, f, default_flow_style=False)
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to update workflow status: {e}")
+            
+    def get_workflow_status(self, run_id: str) -> Dict[str, Any]:
+        """Get the current status of a workflow"""
+        try:
+            workflow_file = self.runs_dir / run_id / "workflow.yaml"
+            if not workflow_file.exists():
+                return {"error": "Workflow not found"}
+                
+            with open(workflow_file, 'r') as f:
+                workflow = yaml.safe_load(f)
+                
+            # Add additional status information
+            run_dir = self.runs_dir / run_id
+            if run_dir.exists():
+                workflow["output_files"] = self._get_output_files(run_dir)
+                workflow["logs"] = self._get_log_files(run_dir)
+                
+            return workflow
+            
+        except Exception as e:
+            return {"error": f"Failed to get workflow status: {e}"}
+            
+    def _get_output_files(self, run_dir: Path) -> List[str]:
+        """Get list of output files from run directory"""
+        output_files = []
+        try:
+            for file_path in run_dir.rglob("*"):
+                if file_path.is_file() and not file_path.name.startswith('.'):
+                    output_files.append(str(file_path.relative_to(run_dir)))
+        except Exception as e:
+            self.logger.error(f"Failed to get output files: {e}")
+        return output_files
         
-        # Try workflow.yaml first
-        workflow_file = run_dir / "workflow.yaml"
-        if workflow_file.exists():
-            return self._load_workflow_from_file(workflow_file)
+    def _get_log_files(self, run_dir: Path) -> List[str]:
+        """Get list of log files from run directory"""
+        log_files = []
+        try:
+            logs_dir = run_dir / "logs"
+            if logs_dir.exists():
+                for file_path in logs_dir.glob("*"):
+                    if file_path.is_file():
+                        log_files.append(str(file_path.relative_to(run_dir)))
+        except Exception as e:
+            self.logger.error(f"Failed to get log files: {e}")
+        return log_files
         
-        # Try legacy main_sample.yaml
-        main_sample_file = run_dir / "main_sample.yaml"
-        if main_sample_file.exists():
-            return self._convert_legacy_sample_file(main_sample_file)
+    def list_workflows(self) -> List[Dict[str, Any]]:
+        """List all available workflows"""
+        workflows = []
+        try:
+            for run_dir in self.runs_dir.iterdir():
+                if run_dir.is_dir():
+                    workflow_file = run_dir / "workflow.yaml"
+                    if workflow_file.exists():
+                        with open(workflow_file, 'r') as f:
+                            workflow = yaml.safe_load(f)
+                            workflows.append(workflow)
+        except Exception as e:
+            self.logger.error(f"Failed to list workflows: {e}")
+        return workflows
         
-        logger.warning(f"No workflow file found for run {run_id}")
-        return None
-    
-    def create_workflow_file_if_missing(self, run_id: str, name: str, description: str, tools: List[str]) -> bool:
-        """Create a workflow.yaml file for an existing run directory that lacks one"""
+    def delete_workflow(self, run_id: str) -> bool:
+        """Delete a workflow and all its data"""
         try:
             run_dir = self.runs_dir / run_id
-            if not run_dir.exists():
-                logger.error(f"Run directory not found: {run_dir}")
-                return False
-            
-            # Check if workflow file already exists
-            workflow_file = run_dir / "workflow.yaml"
-            if workflow_file.exists():
-                logger.info(f"Workflow file already exists: {workflow_file}")
+            if run_dir.exists():
+                shutil.rmtree(run_dir)
+                self.logger.info(f"✅ Deleted workflow: {run_id}")
                 return True
-            
-            # Create tool executions
-            tool_executions = []
-            for i, tool_name in enumerate(tools):
-                tool_exec = ToolExecution(
-                    tool_name=tool_name,
-                    order=i + 1,
-                    status='pending',
-                    config={},
-                    input_files=[],
-                    output_files=[],
-                    logs=[]
-                )
-                tool_executions.append(tool_exec)
-            
-            # Create workflow run
-            now = datetime.now(timezone.utc)
-            workflow_run = WorkflowRun(
-                id=run_id,
-                name=name,
-                description=description,
-                status='pending',
-                created_at=now,
-                updated_at=now,
-                progress=0.0,
-                tools=tool_executions,
-                run_directory=str(run_dir),
-                template_used=False,
-                checkpoint_data={}
-            )
-            
-            # Save workflow file
-            self._save_unified_workflow_file(workflow_run, workflow_file)
-            
-            logger.info(f"Created workflow file for existing run {run_id}")
-            return True
-            
+            else:
+                self.logger.warning(f"⚠️  Workflow not found: {run_id}")
+                return False
         except Exception as e:
-            logger.error(f"Failed to create workflow file for run {run_id}: {e}")
+            self.logger.error(f"❌ Failed to delete workflow {run_id}: {e}")
             return False
 
-# Example usage and testing
-if __name__ == "__main__":
-    import argparse
+
+class ToolExecutor:
+    """Handles the execution of individual bioinformatics tools"""
     
-    parser = argparse.ArgumentParser(description='BioFrame Workflow Orchestrator')
-    parser.add_argument('--test', action='store_true', help='Run in test mode')
-    parser.add_argument('--data-dir', default='./data', help='Data directory path')
-    parser.add_argument('--init-docker', action='store_true', help='Initialize Docker client')
+    def __init__(self, logger):
+        self.logger = logger
+        
+        # Tool registry with execution information
+        self.tool_registry = {
+            "fastqc": {
+                "description": "Quality control for high throughput sequence data",
+                "input_types": [".fastq", ".fq", ".fastq.gz", ".fq.gz"],
+                "output_types": [".html", ".zip", ".txt"],
+                "execution_method": "docker",
+                "container_image": "bioframe-fastqc:latest",
+                "real_execution_time": 720
+            },
+            "trimmomatic": {
+                "description": "A flexible read trimming tool for Illumina NGS data",
+                "input_types": [".fastq", ".fq", ".fastq.gz", ".fq.gz"],
+                "output_types": [".fastq", ".fq", ".log"],
+                "execution_method": "docker",
+                "container_image": "bioframe-trimmomatic:latest",
+                "real_execution_time": 900
+            },
+            "spades": {
+                "description": "Assembler for single-cell and multi-cell data",
+                "input_types": [".fastq", ".fq", ".fastq.gz", ".fq.gz"],
+                "output_types": [".fasta", ".fastg", ".log"],
+                "execution_method": "docker",
+                "container_image": "bioframe-spades:latest",
+                "real_execution_time": 14400
+            },
+            "quast": {
+                "description": "Quality assessment tool for evaluating assemblies",
+                "input_types": [".fasta", ".fa"],
+                "output_types": [".html", ".txt", ".log"],
+                "execution_method": "docker",
+                "container_image": "bioframe-quast:latest",
+                "real_execution_time": 1800
+            },
+            "multiqc": {
+                "description": "Aggregate results from bioinformatics analyses",
+                "input_types": [".html", ".txt", ".log"],
+                "output_types": [".html", ".txt"],
+                "execution_method": "docker",
+                "container_image": "bioframe-multiqc:latest",
+                "real_execution_time": 300
+            }
+        }
     
-    args = parser.parse_args()
-    
-    if args.test:
-        # Test mode - run tests and exit
-        orchestrator = WorkflowOrchestrator(data_dir=args.data_dir, init_docker=args.init_docker)
+    def execute_tool(self, tool_name: str, input_files: List[str], output_dir: str) -> 'ToolExecutionResult':
+        """Execute a bioinformatics tool"""
+        # Normalize tool name for case-insensitive matching
+        tool_name = tool_name.lower()
         
-        print("🔧 Testing BioFrame Workflow Orchestrator")
-        print("=" * 50)
+        if tool_name not in self.tool_registry:
+            return ToolExecutionResult(
+                success=False,
+                output_files=[],
+                error_message=f"Unknown tool: {tool_name}"
+            )
         
-        # Discover existing runs
-        runs = orchestrator.discover_workflow_runs()
-        print(f"📊 Found {len(runs)} existing workflow runs")
-        
-        # Create a test run
-        test_run = orchestrator.create_sample_run(
-            name="Test Workflow",
-            description="A test workflow for demonstration",
-            tools=['fastqc', 'trimmomatic', 'spades']
-        )
-        print(f"✅ Created test run: {test_run.id}")
-        
-        print("\n🎉 Orchestrator test completed successfully!")
-    else:
-        # Service mode - keep running
-        print("🚀 Starting BioFrame Workflow Orchestrator Service")
-        print("=" * 50)
-        
-        orchestrator = WorkflowOrchestrator(data_dir=args.data_dir, init_docker=args.init_docker)
-        
-        # Discover existing runs
-        runs = orchestrator.discover_workflow_runs()
-        print(f"📊 Found {len(runs)} existing workflow runs")
-        
-        print("✅ Orchestrator service is running and ready to handle workflows")
-        print("💡 Use --test flag to run in test mode")
-        
-        # Keep the service running
         try:
-            while True:
-                time.sleep(60)  # Check every minute
-                # You could add periodic tasks here like checking for new workflows
-        except KeyboardInterrupt:
-            print("\n🛑 Orchestrator service stopped by user")
+            # Execute tool via Docker
+            import time
+            start_time = time.time()
+            success, output_files = self._execute_docker_tool(tool_name, input_files, output_dir, {})
+            execution_time = time.time() - start_time
+            
+            if success:
+                return ToolExecutionResult(
+                    success=True,
+                    output_files=output_files,
+                    error_message="",
+                    execution_time=execution_time
+                )
+            else:
+                return ToolExecutionResult(
+                    success=False,
+                    output_files=[],
+                    error_message="Docker execution failed",
+                    execution_time=execution_time
+                )
+                
         except Exception as e:
-            print(f"❌ Orchestrator service error: {e}")
-            raise
+            return ToolExecutionResult(
+                success=False,
+                output_files=[],
+                error_message=f"Tool execution error: {str(e)}"
+            )
+    
+    def _execute_docker_tool(self, tool_name: str, input_files: List[str], 
+                            output_dir: str, tool_config: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """Execute tool using direct Docker commands"""
+        tool_info = self.tool_registry[tool_name]
+        
+        # Build Docker command for direct execution
+        docker_cmd = self._build_docker_command(tool_name, input_files, output_dir, tool_config)
+        
+        self.logger.info(f"Executing {tool_name} via Docker: {' '.join(docker_cmd)}")
+        
+        try:
+            # Execute Docker command directly
+            result = subprocess.run(docker_cmd, capture_output=True, text=True, timeout=3600)
+            
+            if result.returncode == 0:
+                # Get output files
+                output_files = self._collect_output_files(output_dir, tool_info["output_types"])
+                self.logger.info(f"Docker execution successful: {len(output_files)} output files")
+                return True, output_files
+            else:
+                self.logger.error(f"Docker execution failed: {result.stderr}")
+                return False, []
+                
+        except subprocess.TimeoutExpired:
+            self.logger.error("Docker execution timed out")
+            return False, []
+        except Exception as e:
+            self.logger.error(f"Docker execution error: {str(e)}")
+            return False, []
+    
+    def _build_docker_command(self, tool_name: str, input_files: List[str], 
+                             output_dir: str, tool_config: Dict[str, Any]) -> List[str]:
+        """Build Docker command for tool execution using local tool images"""
+        # Base Docker command
+        cmd = ["docker", "run", "--rm"]
+        
+        # Mount volumes - use absolute host paths for Docker
+        # Since we're running from within the portal container, we need to use the host path
+        # The portal container has /home/msalim/Project/BioFrame mounted as /app
+        host_base_path = "/home/msalim/Project/BioFrame"
+        
+        if input_files:
+            # Convert /app/data paths to host paths
+            input_path = input_files[0]
+            if input_path.startswith('/app/data'):
+                # Convert /app/data/... to /home/msalim/Project/BioFrame/data/...
+                host_input_path = input_path.replace('/app/data', f"{host_base_path}/data")
+                input_parent = str(Path(host_input_path).parent)
+            else:
+                input_parent = str(Path(input_files[0]).parent)
+        else:
+            input_parent = f"{host_base_path}/data"
+            
+        if output_dir.startswith('/app/data'):
+            # Convert /app/data/... to /home/msalim/Project/BioFrame/data/...
+            host_output_path = output_dir.replace('/app/data', f"{host_base_path}/data")
+            output_dir_abs = str(Path(host_output_path).resolve())
+        else:
+            output_dir_abs = str(Path(output_dir).resolve())
+            
+        cmd.extend(["-v", f"{input_parent}:/input:ro"])
+        cmd.extend(["-v", f"{output_dir_abs}:/output"])
+        
+        # Set working directory
+        cmd.extend(["-w", "/output"])
+        
+        # Use local tool images (built from docker-compose)
+        image_name = self.tool_registry[tool_name]["container_image"]
+        cmd.append(image_name)
+        
+        # Tool-specific command
+        if tool_name == "fastqc":
+            cmd.extend(["fastqc"] + ["/input/" + Path(f).name for f in input_files])
+            cmd.extend(["-o", "/output"])
+        elif tool_name == "trimmomatic":
+            cmd.extend(["trimmomatic", "PE", "-phred33"])
+            cmd.extend(["/input/" + Path(f).name for f in input_files])
+            cmd.extend(["trimmed_1.fastq", "unpaired_1.fastq", "trimmed_2.fastq", "unpaired_2.fastq"])
+            cmd.extend(["ILLUMINACLIP:/adapters/TruSeq3-SE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"])
+        elif tool_name == "spades":
+            cmd.extend(["spades.py", "--careful", "--only-assembler"])
+            cmd.extend(["--pe1-1", "/input/" + Path(input_files[0]).name])
+            cmd.extend(["--pe1-2", "/input/" + Path(input_files[1]).name])
+            cmd.extend(["-o", "/output"])
+        elif tool_name == "quast":
+            cmd.extend(["quast.py"])
+            cmd.extend(["/input/" + Path(f).name for f in input_files])
+            cmd.extend(["-o", "/output"])
+        elif tool_name == "multiqc":
+            cmd.extend(["multiqc", "/input", "-o", "/output"])
+            
+        return cmd
+    
+    def _collect_output_files(self, output_dir: str, expected_types: List[str]) -> List[str]:
+        """Collect output files from output directory"""
+        output_path = Path(output_dir)
+        output_files = []
+        
+        if output_path.exists():
+            for file_path in output_path.rglob("*"):
+                if file_path.is_file():
+                    # Check if file type matches expected
+                    file_ext = file_path.suffix.lower()
+                    if any(file_ext.endswith(expected_type) for expected_type in expected_types):
+                        output_files.append(str(file_path))
+                    elif file_ext in ['.log', '.txt']:  # Always include logs
+                        output_files.append(str(file_path))
+                    # Special handling for QUAST outputs
+                    elif 'quast' in str(output_dir).lower():
+                        # Include all QUAST output files regardless of extension
+                        if file_ext in ['.html', '.pdf', '.tsv', '.tex', '.log', '.txt']:
+                            output_files.append(str(file_path))
+                        # Also include important QUAST directories as files for tracking
+                        elif file_path.parent.name in ['basic_stats', 'icarus_viewers'] and file_path.is_file():
+                            output_files.append(str(file_path))
+                        
+        return output_files
+
+
+class ToolExecutionResult:
+    """Result of a tool execution"""
+    
+    def __init__(self, success: bool, output_files: List[str], error_message: str, execution_time: float = 0.0, tool_version: str = None, memory_used: str = None, cpu_time: str = None):
+        self.success = success
+        self.output_files = output_files
+        self.error_message = error_message
+        self.execution_time = execution_time
+        self.tool_version = tool_version
+        self.memory_used = memory_used
+        self.cpu_time = cpu_time
+
+
+class IssuesLogger:
+    """Comprehensive logging system for workflow issues, failures, and diagnostics"""
+    
+    def __init__(self):
+        self.issues = []
+        
+    def log_workflow_issue(self, workflow_id: str, issue_type: str, message: str, 
+                          severity: str = "WARNING", details: Dict[str, Any] = None, 
+                          stack_trace: str = None):
+        """Log a workflow issue with comprehensive details"""
+        issue = {
+            "timestamp": datetime.now().isoformat(),
+            "workflow_id": workflow_id,
+            "issue_type": issue_type,
+            "severity": severity,
+            "message": message,
+            "details": details or {},
+            "stack_trace": stack_trace
+        }
+        
+        self.issues.append(issue)
+        
+        # Also log to console for immediate visibility
+        severity_icon = {
+            "CRITICAL": "💥",
+            "ERROR": "❌", 
+            "WARNING": "⚠️",
+            "INFO": "ℹ️"
+        }.get(severity, "❓")
+        
+        print(f"{severity_icon} WORKFLOW ISSUE [{severity}]: {issue_type} - {message}")
+        
+    def log_tool_failure(self, workflow_id: str, tool_name: str, step_number: int, 
+                         error_message: str, exit_code: int = None, 
+                         execution_time: float = None, output_files: List[str] = None):
+        """Log a tool execution failure"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="TOOL_FAILURE",
+            message=f"Tool {tool_name} failed at step {step_number}",
+            severity="ERROR",
+            details={
+                "tool_name": tool_name,
+                "step_number": step_number,
+                "error_message": error_message,
+                "exit_code": exit_code,
+                "execution_time": execution_time,
+                "output_files": output_files or []
+            }
+        )
+        
+    def log_orchestrator_crash(self, workflow_id: str, error_message: str, 
+                              stack_trace: str = None, last_completed_step: int = None):
+        """Log orchestrator crash/failure"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="ORCHESTRATOR_CRASH",
+            message="Workflow orchestrator crashed or failed",
+            severity="CRITICAL",
+            details={
+                "last_completed_step": last_completed_step,
+                "error_message": error_message
+            },
+            stack_trace=stack_trace
+        )
+        
+    def log_resource_issue(self, workflow_id: str, resource_type: str, 
+                          current_value: str, limit: str, message: str):
+        """Log resource-related issues (memory, disk, etc.)"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="RESOURCE_ISSUE",
+            message=f"Resource issue: {message}",
+            severity="WARNING",
+            details={
+                "resource_type": resource_type,
+                "current_value": current_value,
+                "limit": limit
+            }
+        )
+        
+    def log_docker_issue(self, workflow_id: str, tool_name: str, 
+                        docker_error: str, container_id: str = None):
+        """Log Docker-related issues"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="DOCKER_ISSUE",
+            message=f"Docker issue with {tool_name}: {docker_error}",
+            severity="ERROR",
+            details={
+                "tool_name": tool_name,
+                "docker_error": docker_error,
+                "container_id": container_id
+            }
+        )
+        
+    def log_workflow_timeout(self, workflow_id: str, timeout_duration: int, 
+                           completed_steps: int, total_steps: int):
+        """Log workflow timeout issues"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="WORKFLOW_TIMEOUT",
+            message=f"Workflow timed out after {timeout_duration} seconds",
+            severity="WARNING",
+            details={
+                "timeout_duration": timeout_duration,
+                "completed_steps": completed_steps,
+                "total_steps": total_steps,
+                "progress_percentage": (completed_steps / total_steps) * 100 if total_steps > 0 else 0
+            }
+        )
+        
+    def log_file_system_issue(self, workflow_id: str, file_path: str, 
+                             operation: str, error_message: str):
+        """Log file system related issues"""
+        self.log_workflow_issue(
+            workflow_id=workflow_id,
+            issue_type="FILESYSTEM_ISSUE",
+            message=f"File system issue: {operation} failed for {file_path}",
+            severity="ERROR",
+            details={
+                "file_path": file_path,
+                "operation": operation,
+                "error_message": error_message
+            }
+        )
+        
+    def save_issues_log(self, workflow_id: str, run_dir: Path):
+        """Save all issues to a dedicated log file"""
+        try:
+            issues_log_file = run_dir / "logs" / "workflow_issues.log"
+            issues_log_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(issues_log_file, 'w') as f:
+                f.write("=" * 80 + "\n")
+                f.write(f"WORKFLOW ISSUES & FAILURES LOG\n")
+                f.write(f"Generated: {datetime.now().isoformat()}\n")
+                f.write("=" * 80 + "\n\n")
+                
+                if not self.issues:
+                    f.write("✅ No issues detected - workflow completed successfully!\n\n")
+                else:
+                    f.write(f"🚨 {len(self.issues)} issues detected during workflow execution:\n\n")
+                    
+                    for i, issue in enumerate(self.issues, 1):
+                        f.write(f"ISSUE #{i}\n")
+                        f.write("-" * 40 + "\n")
+                        f.write(f"Timestamp: {issue['timestamp']}\n")
+                        f.write(f"Type: {issue['issue_type']}\n")
+                        f.write(f"Severity: {issue['severity']}\n")
+                        f.write(f"Message: {issue['message']}\n")
+                        
+                        if issue['details']:
+                            f.write(f"Details:\n")
+                            for key, value in issue['details'].items():
+                                f.write(f"  {key}: {value}\n")
+                                
+                        if issue['stack_trace']:
+                            f.write(f"Stack Trace:\n{issue['stack_trace']}\n")
+                            
+                        f.write("\n")
+                        
+            print(f"📝 Issues log saved to: {issues_log_file}")
+            
+        except Exception as e:
+            print(f"❌ Failed to save issues log: {str(e)}")
+            
+    def get_issues_summary(self, workflow_id: str) -> Dict[str, Any]:
+        """Get a summary of all issues for a workflow"""
+        if not self.issues:
+            return {
+                "workflow_id": workflow_id,
+                "total_issues": 0,
+                "status": "CLEAN",
+                "summary": "No issues detected"
+            }
+            
+        # Count issues by severity
+        severity_counts = {}
+        issue_types = {}
+        
+        for issue in self.issues:
+            severity = issue['severity']
+            issue_type = issue['issue_type']
+            
+            severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            issue_types[issue_type] = issue_types.get(issue_type, 0) + 1
+            
+        # Determine overall status
+        if any(issue['severity'] == 'CRITICAL' for issue in self.issues):
+            overall_status = "CRITICAL_FAILURE"
+        elif any(issue['severity'] == 'ERROR' for issue in self.issues):
+            overall_status = "ERRORS_DETECTED"
+        elif any(issue['severity'] == 'WARNING' for issue in self.issues):
+            overall_status = "WARNINGS_DETECTED"
+        else:
+            overall_status = "CLEAN"
+            
+        return {
+            "workflow_id": workflow_id,
+            "total_issues": len(self.issues),
+            "status": overall_status,
+            "severity_breakdown": severity_counts,
+            "issue_type_breakdown": issue_types,
+            "summary": f"Detected {len(self.issues)} issues: {', '.join(f'{count} {severity}' for severity, count in severity_counts.items())}"
+        }

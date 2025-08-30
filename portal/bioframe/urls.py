@@ -17,6 +17,16 @@ urlpatterns = [
     path('workflow-list/', views.workflow_list, name='workflow_list'),
     path('workflow/<str:workflow_id>/', views.workflow_detail, name='workflow_detail'),
     path('workflow/<str:workflow_id>/status/', views.workflow_status_api, name='workflow_status_api'),
+    path('workflow/<str:workflow_id>/view-file/', views.view_workflow_file, name='view_workflow_file'),
+    path('workflow/<str:workflow_id>/download-file/', views.download_workflow_file, name='download_workflow_file'),
+    path('workflow/<str:workflow_id>/rerun/', views.rerun_workflow, name='rerun_workflow'),
+    path('workflow/<str:workflow_id>/rerun/<int:step_number>/', views.rerun_workflow_from_step, name='rerun_workflow_from_step'),
+    path('workflow/<str:workflow_id>/tool-logs/<str:tool_name>/', views.get_tool_logs, name='get_tool_logs'),
+    path('workflow/<str:workflow_id>/tool-log-file/<str:tool_name>/', views.get_tool_log_file, name='get_tool_log_file'),
+    path('workflow/<str:workflow_id>/issues-log/', views.get_workflow_issues_log, name='get_workflow_issues_log'),
+    path('workflow/<str:workflow_id>/issues-log/download/', views.download_workflow_issues_log, name='download_workflow_issues_log'),
+    path('workflow/<str:workflow_id>/execution-log/', views.get_workflow_execution_log, name='get_workflow_execution_log'),
+    path('workflow-list-json/', views.workflow_list_json, name='workflow_list_json'),
     path('create-workflow-for-run/<str:run_id>/', views.create_workflow_for_run, name='create_workflow_for_run'),
     path('initialize-workflow/<str:template_id>/', views.initialize_workflow_run, name='initialize_workflow_run'),
     path('tools/', include('tools.urls')),
@@ -27,3 +37,4 @@ urlpatterns = [
 # Serve media files during development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -39,6 +39,11 @@ RUN wget http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmoma
     && chmod +x Trimmomatic-0.39/trimmomatic-0.39.jar \
     && ln -s /Trimmomatic-0.39/trimmomatic-0.39.jar /usr/local/bin/trimmomatic.jar
 
+# Copy adapter files to a standard location
+RUN mkdir -p /usr/local/share/trimmomatic/adapters \
+    && cp Trimmomatic-0.39/adapters/* /usr/local/share/trimmomatic/adapters/ \
+    && ln -s /usr/local/share/trimmomatic/adapters /adapters
+
 # Create wrapper script
 RUN echo '#!/bin/bash\njava -jar /usr/local/bin/trimmomatic.jar "$@"' > /usr/local/bin/trimmomatic \
     && chmod +x /usr/local/bin/trimmomatic

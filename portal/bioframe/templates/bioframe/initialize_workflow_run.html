@@ -498,6 +498,10 @@ document.getElementById('workflow-form').addEventListener('submit', function(e) 
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting Pipeline...';
+    
+    // Allow form to submit naturally - don't prevent default
+    // The form will submit and redirect to workflow details page
+    return true;
 });
 </script>
 {% endblock %}

@@ -17,9 +17,9 @@
             </p>
         </div>
 
-        <!-- Statistics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+        <!-- Enhanced Statistics Cards with Better Colors -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
                 <div class="flex items-center">
                     <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-project-diagram text-blue-600 text-xl"></i>
@@ -31,38 +31,50 @@
                 </div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-green-200 hover:shadow-xl transition-shadow duration-300">
                 <div class="flex items-center">
                     <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-check-circle text-green-600 text-xl"></i>
                     </div>
                     <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-600">Completed</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ stats.completed_workflows }}</p>
+                        <p class="text-sm font-medium text-green-600">Completed</p>
+                        <p class="text-2xl font-bold text-green-700">{{ stats.completed_workflows }}</p>
                     </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-blue-200 hover:shadow-xl transition-shadow duration-300">
                 <div class="flex items-center">
-                    <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                        <i class="fas fa-spinner text-yellow-600 text-xl"></i>
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-spinner text-blue-600 text-xl"></i>
                     </div>
                     <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-600">Running</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ stats.running_workflows }}</p>
+                        <p class="text-sm font-medium text-blue-600">Running</p>
+                        <p class="text-2xl font-bold text-blue-700">{{ stats.running_workflows }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-red-200 hover:shadow-xl transition-shadow duration-300">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-red-600">Failed</p>
+                        <p class="text-2xl font-bold text-red-700">{{ stats.failed_workflows|default:0 }}</p>
                     </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+            <div class="bg-white rounded-xl shadow-lg p-6 border border-purple-200 hover:shadow-xl transition-shadow duration-300">
                 <div class="flex items-center">
                     <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-tools text-purple-600 text-xl"></i>
                     </div>
                     <div class="ml-4">
-                        <p class="text-sm font-medium text-gray-600">Available Tools</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ tools_count }}</p>
+                        <p class="text-sm font-medium text-purple-600">Available Tools</p>
+                        <p class="text-2xl font-bold text-purple-700">{{ tools_count }}</p>
                     </div>
                 </div>
             </div>
@@ -81,7 +93,7 @@
                         <div class="w-16 h-16 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
                             <i class="fas fa-list text-white text-2xl"></i>
                         </div>
-                        <h4 class="text-xl font-bold text-gray-900 mb-2">Browse Pipelines</h4>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Browse Templates</h4>
                         <p class="text-gray-600">Explore existing analysis workflows and templates</p>
                     </a>
                     
@@ -90,8 +102,8 @@
                         <div class="w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
                             <i class="fas fa-plus text-white text-2xl"></i>
                         </div>
-                        <h4 class="text-xl font-bold text-gray-900 mb-2">Design Pipeline</h4>
-                        <p class="text-gray-600">Create custom bioinformatics workflows</p>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Create New Workflow</h4>
+                        <p class="text-gray-600">Design custom bioinformatics workflows from scratch</p>
                     </a>
                     
                     <a href="{% url 'tools:tool_list' %}" 
@@ -106,57 +118,112 @@
             </div>
         </div>
 
-        <!-- Genomic Activity Timeline -->
+        <!-- Enhanced Genomic Activity Timeline with Better Status Colors -->
         <div class="bio-card rounded-xl shadow-lg p-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-6 flex items-center">
                 <i class="fas fa-chart-line mr-4 text-blue-600"></i>
                 Genomic Activity Timeline
             </h2>
             
+
+            
             {% if recent_activities %}
                 <div class="space-y-4">
                     {% for activity in recent_activities %}
-                    <div class="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow duration-200">
+                    <div class="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-all duration-200 hover:border-gray-300">
                         <a href="{% url 'workflow_detail' workflow_id=activity.id %}" class="block">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center space-x-4">
-                                    <div class="w-10 h-10 rounded-full flex items-center justify-center 
-                                                {% if activity.status == 'completed' %}bg-green-100 text-green-600
-                                                {% elif activity.status == 'running' %}bg-blue-100 text-blue-600
-                                                {% elif activity.status == 'failed' %}bg-red-100 text-red-600
-                                                {% else %}bg-gray-100 text-gray-600{% endif %}">
-                                        <i class="fas {% if activity.status == 'completed' %}fa-check
-                                                     {% elif activity.status == 'running' %}fa-spinner fa-spin
-                                                     {% elif activity.status == 'failed' %}fa-exclamation-triangle
-                                                     {% else %}fa-clock{% endif %}"></i>
+                                    <!-- Enhanced Status Icon with Better Colors -->
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center 
+                                                {% if activity.status == 'completed' %}bg-green-100 text-green-600 border-2 border-green-200
+                                                {% elif activity.status == 'running' %}bg-blue-100 text-blue-600 border-2 border-blue-200
+                                                {% elif activity.status == 'failed' %}bg-red-100 text-red-600 border-2 border-red-200
+                                                {% elif activity.status == 'pending' %}bg-yellow-100 text-yellow-600 border-2 border-yellow-200
+                                                {% else %}bg-gray-100 text-gray-600 border-2 border-gray-200{% endif %}">
+                                        <i class="fas {% if activity.status == 'completed' %}fa-check text-lg
+                                                     {% elif activity.status == 'running' %}fa-spinner fa-spin text-lg
+                                                     {% elif activity.status == 'failed' %}fa-exclamation-triangle text-lg
+                                                     {% elif activity.status == 'pending' %}fa-clock text-lg
+                                                     {% else %}fa-question text-lg{% endif %}"></i>
                                     </div>
-                                    <div>
-                                        <h4 class="font-semibold text-gray-900">{{ activity.name }}</h4>
-                                        <p class="text-sm text-gray-600">{{ activity.description }}</p>
-                                        <div class="flex items-center space-x-4 mt-1">
-                                            <span class="text-xs text-gray-500">
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900 text-lg">{{ activity.name }}</h4>
+                                        <p class="text-sm text-gray-600 mb-2">{{ activity.description }}</p>
+                                        
+                                        <!-- Workflow ID Display -->
+                                        <div class="mb-2 flex items-center space-x-2">
+                                            <span class="text-xs font-medium text-gray-500">ID:</span>
+                                            <code class="px-2 py-1 bg-gray-100 text-gray-700 rounded font-mono text-xs border border-gray-200">
+                                                {{ activity.id }}
+                                            </code>
+                                            <button onclick="copyWorkflowId('{{ activity.id }}')" 
+                                                    class="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded"
+                                                    title="Copy Workflow ID">
+                                                <i class="fas fa-copy text-xs"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div class="flex items-center space-x-4 text-xs text-gray-500">
+                                            <span class="flex items-center">
                                                 <i class="fas fa-tools mr-1"></i>
                                                 {{ activity.tools|join:", " }}
                                             </span>
-                                            <span class="text-xs text-gray-500">
+                                            <span class="flex items-center">
                                                 <i class="fas fa-clock mr-1"></i>
                                                 {{ activity.created_at|timesince }} ago
                                             </span>
+                                            {% if activity.step_count %}
+                                            <span class="flex items-center">
+                                                <i class="fas fa-layer-group mr-1"></i>
+                                                {{ activity.step_count }} steps
+                                            </span>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-sm font-medium text-gray-900">{{ activity.status|title }}</span>
-                                        {% if activity.status == 'running' %}
-                                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                                        {% endif %}
+                                    <!-- Enhanced Status Badge with Better Colors -->
+                                    <div class="mb-2">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                                                    {% if activity.status == 'completed' %}bg-green-100 text-green-800 border border-green-200
+                                                    {% elif activity.status == 'running' %}bg-blue-100 text-blue-800 border border-blue-200
+                                                    {% elif activity.status == 'failed' %}bg-red-100 text-red-800 border border-red-200
+                                                    {% elif activity.status == 'pending' %}bg-yellow-100 text-yellow-800 border border-yellow-200
+                                                    {% else %}bg-gray-100 text-gray-800 border border-gray-200{% endif %}">
+                                            {% if activity.status == 'completed' %}
+                                                <i class="fas fa-check-circle mr-1"></i>Completed
+                                            {% elif activity.status == 'running' %}
+                                                <i class="fas fa-spinner fa-spin mr-1"></i>Running
+                                            {% elif activity.status == 'failed' %}
+                                                <i class="fas fa-exclamation-triangle mr-1"></i>Failed
+                                            {% elif activity.status == 'pending' %}
+                                                <i class="fas fa-clock mr-1"></i>Pending
+                                            {% else %}
+                                                <i class="fas fa-question-circle mr-1"></i>{{ activity.status|title }}
+                                            {% endif %}
+                                        </span>
                                     </div>
-                                    {% if activity.progress %}
-                                        <div class="w-24 bg-gray-200 rounded-full h-2 mt-2">
-                                            <div class="bg-blue-600 h-2 rounded-full" style="width: {{ activity.progress }}%"></div>
+                                    
+                                    <!-- Enhanced Progress Bar with Better Colors -->
+                                    {% if activity.progress is not None %}
+                                        <div class="w-32 bg-gray-200 rounded-full h-3 mb-1">
+                                            <div class="h-3 rounded-full transition-all duration-300
+                                                        {% if activity.status == 'completed' %}bg-green-500
+                                                        {% elif activity.status == 'running' %}bg-blue-500
+                                                        {% elif activity.status == 'failed' %}bg-red-500
+                                                        {% elif activity.status == 'pending' %}bg-yellow-500
+                                                        {% else %}bg-gray-500{% endif %}" 
+                                                 style="width: {{ activity.progress }}%"></div>
                                         </div>
-                                        <span class="text-xs text-gray-500">{{ activity.progress }}%</span>
+                                        <span class="text-xs font-medium
+                                                   {% if activity.status == 'completed' %}text-green-600
+                                                   {% elif activity.status == 'running' %}text-blue-600
+                                                   {% elif activity.status == 'failed' %}text-red-600
+                                                   {% elif activity.status == 'pending' %}text-yellow-600
+                                                   {% else %}text-gray-600{% endif %}">
+                                            {{ activity.progress }}%
+                                        </span>
                                     {% endif %}
                                 </div>
                             </div>
@@ -164,32 +231,293 @@
                     </div>
                     {% endfor %}
                 </div>
+                
+                <!-- Expandable Workflows Section -->
+                <div class="text-center mt-8">
+                    <button onclick="toggleAllWorkflows()" 
+                            id="toggle-workflows-btn"
+                            class="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200">
+                        <i class="fas fa-chevron-down mr-2" id="toggle-icon"></i>
+                        <span id="toggle-text">Show All Workflows</span>
+                    </button>
+                </div>
+                
+                <!-- Hidden Workflows (Initially Hidden) -->
+                <div id="hidden-workflows" class="hidden space-y-4 mt-6">
+                    <!-- Hidden workflows will be loaded here -->
+                </div>
             {% else %}
                 <div class="text-center py-12">
                     <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <i class="fas fa-dna text-gray-400 text-3xl"></i>
                     </div>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">No workflows yet</h3>
-                    <p class="text-gray-600 mb-6">Get started by creating your first bioinformatics workflow</p>
-                    <a href="{% url 'create_workflow' %}" 
+                    <p class="text-gray-600 mb-6">Get started by browsing available workflow templates and initializing your first bioinformatics workflow</p>
+                    <a href="{% url 'workflow_list' %}" 
                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
-                        <i class="fas fa-plus mr-2"></i>
-                        Create First Workflow
+                        <i class="fas fa-list mr-2"></i>
+                        Browse Workflow Templates
                     </a>
                 </div>
             {% endif %}
         </div>
 
-        <!-- System Status -->
+        <!-- Enhanced System Status with Better Colors -->
         <div class="mt-8 text-center">
-            <div class="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+            <div class="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium border border-green-200">
                 <i class="fas fa-check-circle mr-2"></i>
                 System Status: {{ system_status|title }}
             </div>
-            <p class="text-sm text-gray-600 mt-2">
-                File-based workflows: {{ file_based_count }} | Database workflows: {{ db_based_count }}
-            </p>
+            <div class="mt-4 flex justify-center space-x-6">
+                <div class="flex items-center space-x-2">
+                    <span class="w-3 h-3 bg-blue-500 rounded-full"></span>
+                    <span class="text-sm text-gray-600">File-based workflows: {{ file_based_count }}</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="w-3 h-3 bg-purple-500 rounded-full"></span>
+                    <span class="text-sm text-gray-600">Database workflows: {{ db_based_count }}</span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- JavaScript for Copying Workflow IDs -->
+<script>
+    function copyWorkflowId(workflowId) {
+        // Copy workflow ID to clipboard
+        navigator.clipboard.writeText(workflowId).then(function() {
+            // Show success feedback
+            const button = event.target.closest('button');
+            const originalIcon = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-600 text-xs"></i>';
+            button.title = 'Copied!';
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                button.innerHTML = originalIcon;
+                button.title = 'Copy Workflow ID';
+            }, 2000);
+        }).catch(function(err) {
+            console.error('Failed to copy workflow ID: ', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = workflowId;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            // Show success feedback
+            const button = event.target.closest('button');
+            const originalIcon = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-600 text-xs"></i>';
+            button.title = 'Copied!';
+            
+            setTimeout(() => {
+                button.innerHTML = originalIcon;
+                button.title = 'Copy Workflow ID';
+            }, 2000);
+        });
+    }
+    
+    // Global variable to store all workflows
+    let allWorkflows = [];
+    let isExpanded = false;
+    
+    function toggleAllWorkflows() {
+        const hiddenContainer = document.getElementById('hidden-workflows');
+        const toggleBtn = document.getElementById('toggle-workflows-btn');
+        const toggleIcon = document.getElementById('toggle-icon');
+        const toggleText = document.getElementById('toggle-text');
+        
+        if (!isExpanded) {
+            // Expand and load all workflows
+            if (allWorkflows.length === 0) {
+                // Load all workflows from the backend
+                loadAllWorkflows().then(() => {
+                    showHiddenWorkflows();
+                    updateToggleButton(true);
+                });
+            } else {
+                showHiddenWorkflows();
+                updateToggleButton(true);
+            }
+        } else {
+            // Collapse
+            hideHiddenWorkflows();
+            updateToggleButton(false);
+        }
+    }
+    
+    function updateToggleButton(expanded) {
+        const toggleIcon = document.getElementById('toggle-icon');
+        const toggleText = document.getElementById('toggle-text');
+        
+        if (expanded) {
+            toggleIcon.className = 'fas fa-chevron-up mr-2';
+            toggleText.textContent = 'Hide All Workflows';
+        } else {
+            toggleIcon.className = 'fas fa-chevron-down mr-2';
+            toggleText.textContent = 'Show All Workflows';
+        }
+    }
+    
+    function showHiddenWorkflows() {
+        const hiddenContainer = document.getElementById('hidden-workflows');
+        
+        // Clear existing content
+        hiddenContainer.innerHTML = '';
+        
+        // Add all workflows (excluding the first 10 that are already shown)
+        const workflowsToShow = allWorkflows.slice(10);
+        
+        if (workflowsToShow.length === 0) {
+            hiddenContainer.innerHTML = '<div class="text-center text-gray-500 py-4">No additional workflows to show</div>';
+            return;
+        }
+        
+        workflowsToShow.forEach(workflow => {
+            const workflowCard = renderWorkflowCard(workflow);
+            hiddenContainer.innerHTML += workflowCard;
+        });
+        
+        hiddenContainer.classList.remove('hidden');
+        isExpanded = true;
+    }
+    
+    function hideHiddenWorkflows() {
+        const hiddenContainer = document.getElementById('hidden-workflows');
+        hiddenContainer.classList.add('hidden');
+        isExpanded = false;
+    }
+    
+    async function loadAllWorkflows() {
+        try {
+            // Fetch all workflows from the backend
+            const response = await fetch('/workflow-list-json/');
+            if (response.ok) {
+                const data = await response.json();
+                allWorkflows = data.workflows || [];
+                return true;
+            } else {
+                console.error('Failed to load workflows');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error loading workflows:', error);
+            return false;
+        }
+    }
+    
+    function renderWorkflowCard(workflow) {
+        // Create workflow card HTML similar to the existing ones
+        const statusColors = {
+            'completed': 'bg-green-100 text-green-600 border-green-200',
+            'running': 'bg-blue-100 text-blue-600 border-blue-200',
+            'failed': 'bg-red-100 text-red-600 border-red-200',
+            'pending': 'bg-yellow-100 text-yellow-600 border-yellow-200'
+        };
+        
+        const statusIcons = {
+            'completed': 'fa-check text-lg',
+            'running': 'fa-spinner fa-spin text-lg',
+            'failed': 'fa-exclamation-triangle text-lg',
+            'pending': 'fa-clock text-lg'
+        };
+        
+        const statusBadgeColors = {
+            'completed': 'bg-green-100 text-green-800 border-green-200',
+            'running': 'bg-blue-100 text-blue-800 border-blue-200',
+            'failed': 'bg-red-100 text-red-800 border-red-200',
+            'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        };
+        
+        const statusBadgeText = {
+            'completed': '<i class="fas fa-check-circle mr-1"></i>Completed',
+            'running': '<i class="fas fa-spinner fa-spin mr-1"></i>Running',
+            'failed': '<i class="fas fa-exclamation-triangle mr-1"></i>Failed',
+            'pending': '<i class="fas fa-clock mr-1"></i>Pending'
+        };
+        
+        const progressBarColors = {
+            'completed': 'bg-green-500',
+            'running': 'bg-blue-500',
+            'failed': 'bg-red-500',
+            'pending': 'bg-yellow-500'
+        };
+        
+        const progressTextColors = {
+            'completed': 'text-green-600',
+            'running': 'text-blue-600',
+            'failed': 'text-red-600',
+            'pending': 'text-yellow-600'
+        };
+        
+        const status = workflow.status || 'unknown';
+        const progress = workflow.progress || 0;
+        const tools = workflow.tools || [];
+        const toolNames = Array.isArray(tools) ? tools.map(t => typeof t === 'string' ? t : t.tool_name || 'unknown') : [];
+        
+        return `
+            <div class="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-all duration-200 hover:border-gray-300">
+                <a href="/workflow/${workflow.id}/" class="block">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 rounded-full flex items-center justify-center border-2 ${statusColors[status] || 'bg-gray-100 text-gray-600 border-gray-200'}">
+                                <i class="fas ${statusIcons[status] || 'fa-question text-lg'}"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-gray-900 text-lg">${workflow.name || 'Unnamed Workflow'}</h4>
+                                <p class="text-sm text-gray-600 mb-2">Workflow with ${toolNames.length} tools: ${toolNames.join(', ')}</p>
+                                
+                                <!-- Workflow ID Display -->
+                                <div class="mb-2 flex items-center space-x-2">
+                                    <span class="text-xs font-medium text-gray-500">ID:</span>
+                                    <code class="px-2 py-1 bg-gray-100 text-gray-700 rounded font-mono text-xs border border-gray-200">
+                                        ${workflow.id}
+                                    </code>
+                                    <button onclick="event.preventDefault(); copyWorkflowId('${workflow.id}')" 
+                                            class="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded"
+                                            title="Copy Workflow ID">
+                                        <i class="fas fa-copy text-xs"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="flex items-center space-x-4 text-xs text-gray-500">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-tools mr-1"></i>
+                                        ${toolNames.join(', ')}
+                                    </span>
+                                    <span class="flex items-center">
+                                        <i class="fas fa-layer-group mr-1"></i>
+                                        ${toolNames.length} steps
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="mb-2">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusBadgeColors[status] || 'bg-gray-100 text-gray-800 border-gray-200'}">
+                                    ${statusBadgeText[status] || '<i class="fas fa-question-circle mr-1"></i>' + (status.charAt(0).toUpperCase() + status.slice(1))}
+                                </span>
+                            </div>
+                            
+                            ${progress !== null ? `
+                                <div class="w-32 bg-gray-200 rounded-full h-3 mb-1">
+                                    <div class="h-3 rounded-full transition-all duration-300 ${progressBarColors[status] || 'bg-gray-500'}" 
+                                         style="width: ${progress}%"></div>
+                                </div>
+                                <span class="text-xs font-medium ${progressTextColors[status] || 'text-gray-600'}">
+                                    ${progress}%
+                                </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                </a>
+            </div>
+        `;
+    }
+</script>
+
 {% endblock %}
