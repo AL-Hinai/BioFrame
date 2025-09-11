@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/samtools/samtools
 # tool_icon: file-alt
 # tool_color: purple
+# tool_commands: samtools,view,sort,index,merge,flagstat,stats,coverage,mpileup,consensus,faidx,fixmate,calmd,markdup,rmdup,addreplacerg,merge,split,quickcheck,cat,reheader,reset,collate,phase,stats,coverage,mpileup,consensus,faidx,fixmate,calmd,markdup,rmdup,addreplacerg,merge,split,quickcheck,cat,reheader,reset,collate,phase
+# tool_primary_command: samtools
+# tool_command_template: samtools {subcommand} {input_files} {output_options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

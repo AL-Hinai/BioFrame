@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/ewels/MultiQC
 # tool_icon: chart-pie
 # tool_color: indigo
+# tool_commands: multiqc
+# tool_primary_command: multiqc
+# tool_command_template: multiqc {input_dir} -o {output_dir} {options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

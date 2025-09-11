@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/broadinstitute/gatk
 # tool_icon: search
 # tool_color: red
+# tool_commands: gatk,HaplotypeCaller,GenotypeGVCFs,SelectVariants,FilterVariants,CombineGVCFs,GenomicsDBImport,ApplyVQSR,BaseRecalibrator,PrintReads,MarkDuplicates,SortSam,AddOrReplaceReadGroups,CreateSequenceDictionary,IndexFeatureFile,IndexVcf,ValidateSamFile,CollectReadCounts,DenoiseReadCounts,ModelSegments,CallCopyRatioSegments,PlotModeledSegments,CollectAllelicCounts,DenoiseReadCounts,ModelSegments,CallCopyRatioSegments,PlotModeledSegments,CollectAllelicCounts
+# tool_primary_command: gatk
+# tool_command_template: gatk {tool_name} {input_files} {output_files} {options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

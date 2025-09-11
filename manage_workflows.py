@@ -225,6 +225,196 @@ class WorkflowManager:
                         }
                     }
                 ]
+            },
+            'phylogenomics_gene_recovery': {
+                'name': 'Phylogenomics Gene Recovery Pipeline',
+                'description': 'Extract genes from Illumina sequencing data using Paftools or HybPiper',
+                'steps': [
+                    {
+                        'name': 'Quality Control',
+                        'tool': 'trimmomatic',
+                        'order': 1,
+                        'inputs': ['input/*.fastq.gz'],
+                        'outputs': ['trimmed/'],
+                        'config': {
+                            'threads': 4,
+                            'mode': 'PE',
+                            'trimming_options': ['ILLUMINACLIP:/adapters/TruSeq3-PE.fa:2:30:10', 'LEADING:3', 'TRAILING:3', 'SLIDINGWINDOW:4:15', 'MINLEN:36']
+                        }
+                    },
+                    {
+                        'name': 'Gene Recovery - Paftools',
+                        'tool': 'paftools',
+                        'order': 2,
+                        'inputs': ['trimmed/*.fastq.gz'],
+                        'outputs': ['recovered_genes/'],
+                        'config': {
+                            'method': 'paftools',
+                            'target_genes': 'auto',
+                            'output_format': 'fasta'
+                        }
+                    },
+                    {
+                        'name': 'Sequence Processing',
+                        'tool': 'seqtk',
+                        'order': 3,
+                        'inputs': ['recovered_genes/*.fasta'],
+                        'outputs': ['processed_genes/'],
+                        'config': {
+                            'subcommand': 'seq',
+                            'format': 'fasta'
+                        }
+                    }
+                ]
+            },
+            'phylogenomics_analysis': {
+                'name': 'Phylogenomics Phylogenetic Analysis Pipeline',
+                'description': 'Construct species trees from recovered genes using multiple phylogenetic methods',
+                'steps': [
+                    {
+                        'name': 'Multiple Sequence Alignment',
+                        'tool': 'mafft',
+                        'order': 1,
+                        'inputs': ['input/*.fasta'],
+                        'outputs': ['alignments/'],
+                        'config': {
+                            'algorithm': 'auto',
+                            'output_format': 'fasta',
+                            'threads': 4,
+                            'options': ['--auto', '--reorder']
+                        }
+                    },
+                    {
+                        'name': 'Gene Tree Construction - IQ-TREE',
+                        'tool': 'iqtree',
+                        'order': 2,
+                        'inputs': ['alignments/*.fasta'],
+                        'outputs': ['gene_trees/'],
+                        'config': {
+                            'model': 'MFP',
+                            'bootstrap': 1000,
+                            'threads': 4,
+                            'options': ['-bb', '1000', '-nt', '4']
+                        }
+                    },
+                    {
+                        'name': 'Species Tree Construction - ASTRAL',
+                        'tool': 'astral',
+                        'order': 3,
+                        'inputs': ['gene_trees/*.nwk'],
+                        'outputs': ['species_trees/'],
+                        'config': {
+                            'method': 'astral',
+                            'bootstrap': 100,
+                            'options': ['-i', 'gene_trees.nwk', '-o', 'species_tree_astral.nwk']
+                        }
+                    },
+                    {
+                        'name': 'Species Tree Construction - Concatenated',
+                        'tool': 'iqtree',
+                        'order': 4,
+                        'inputs': ['alignments/concatenated.fasta'],
+                        'outputs': ['species_trees/concatenated/'],
+                        'config': {
+                            'model': 'MFP',
+                            'bootstrap': 1000,
+                            'threads': 4,
+                            'options': ['-bb', '1000', '-nt', '4', '-s', 'concatenated_alignment.fasta']
+                        }
+                    }
+                ]
+            },
+            'complete_phylogenomics': {
+                'name': 'Complete Phylogenomics Pipeline',
+                'description': 'End-to-end phylogenomics analysis from raw sequencing data to species trees',
+                'steps': [
+                    {
+                        'name': 'Quality Control',
+                        'tool': 'trimmomatic',
+                        'order': 1,
+                        'inputs': ['input/*.fastq.gz'],
+                        'outputs': ['trimmed/'],
+                        'config': {
+                            'threads': 4,
+                            'mode': 'PE',
+                            'trimming_options': ['ILLUMINACLIP:/adapters/TruSeq3-PE.fa:2:30:10', 'LEADING:3', 'TRAILING:3', 'SLIDINGWINDOW:4:15', 'MINLEN:36']
+                        }
+                    },
+                    {
+                        'name': 'Gene Recovery',
+                        'tool': 'paftools',
+                        'order': 2,
+                        'inputs': ['trimmed/*.fastq.gz'],
+                        'outputs': ['recovered_genes/'],
+                        'config': {
+                            'method': 'paftools',
+                            'target_genes': 'auto',
+                            'output_format': 'fasta'
+                        }
+                    },
+                    {
+                        'name': 'Sequence Processing',
+                        'tool': 'seqtk',
+                        'order': 3,
+                        'inputs': ['recovered_genes/*.fasta'],
+                        'outputs': ['processed_genes/'],
+                        'config': {
+                            'subcommand': 'seq',
+                            'format': 'fasta'
+                        }
+                    },
+                    {
+                        'name': 'Multiple Sequence Alignment',
+                        'tool': 'mafft',
+                        'order': 4,
+                        'inputs': ['processed_genes/*.fasta'],
+                        'outputs': ['alignments/'],
+                        'config': {
+                            'algorithm': 'auto',
+                            'output_format': 'fasta',
+                            'threads': 4,
+                            'options': ['--auto', '--reorder']
+                        }
+                    },
+                    {
+                        'name': 'Gene Tree Construction',
+                        'tool': 'iqtree',
+                        'order': 5,
+                        'inputs': ['alignments/*.fasta'],
+                        'outputs': ['gene_trees/'],
+                        'config': {
+                            'model': 'MFP',
+                            'bootstrap': 1000,
+                            'threads': 4,
+                            'options': ['-bb', '1000', '-nt', '4']
+                        }
+                    },
+                    {
+                        'name': 'Species Tree Construction - ASTRAL',
+                        'tool': 'astral',
+                        'order': 6,
+                        'inputs': ['gene_trees/*.nwk'],
+                        'outputs': ['species_trees/astral/'],
+                        'config': {
+                            'method': 'astral',
+                            'bootstrap': 100,
+                            'options': ['-i', 'gene_trees.nwk', '-o', 'species_tree_astral.nwk']
+                        }
+                    },
+                    {
+                        'name': 'Species Tree Construction - Concatenated',
+                        'tool': 'iqtree',
+                        'order': 7,
+                        'inputs': ['alignments/concatenated.fasta'],
+                        'outputs': ['species_trees/concatenated/'],
+                        'config': {
+                            'model': 'MFP',
+                            'bootstrap': 1000,
+                            'threads': 4,
+                            'options': ['-bb', '1000', '-nt', '4', '-s', 'concatenated_alignment.fasta']
+                        }
+                    }
+                ]
             }
         }
     

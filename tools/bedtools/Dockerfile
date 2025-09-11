@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/arq5x/bedtools2
 # tool_icon: tools
 # tool_color: teal
+# tool_commands: intersect,union,subtract,merge,coverage,getfasta,slop,flank,closest,window,map,groupby,annotate,genomecov,merge,subtract,complement,shift,shuffle,random,makewindows,getfasta,getoverlap,closest,window,map,groupby,annotate,genomecov,merge,subtract,complement,shift,shuffle,random,makewindows
+# tool_primary_command: bedtools
+# tool_command_template: bedtools {subcommand} {input_files} {output_options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

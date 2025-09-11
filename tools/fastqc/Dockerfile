@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://www.bioinformatics.babraham.ac.uk/projects/fastqc/
 # tool_icon: chart-line
 # tool_color: blue
+# tool_commands: fastqc
+# tool_primary_command: fastqc
+# tool_command_template: fastqc {input_files} -o {output_dir} {options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

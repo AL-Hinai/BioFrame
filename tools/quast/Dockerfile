@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/ablab/quast
 # tool_icon: chart-bar
 # tool_color: orange
+# tool_commands: quast.py
+# tool_primary_command: quast.py
+# tool_command_template: quast.py {assembly_files} -o {output_dir} {options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

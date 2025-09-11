@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/ablab/spades
 # tool_icon: puzzle-piece
 # tool_color: green
+# tool_commands: spades.py
+# tool_primary_command: spades.py
+# tool_command_template: spades.py -1 {read1} -2 {read2} -o {output_dir} {options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

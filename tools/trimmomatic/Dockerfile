@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: http://www.usadellab.org/cms/?page=trimmomatic
 # tool_icon: scissors
 # tool_color: green
+# tool_commands: trimmomatic
+# tool_primary_command: trimmomatic
+# tool_command_template: trimmomatic {mode} {input_files} {output_files} {trimming_options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

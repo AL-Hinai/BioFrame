@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/broadinstitute/pilon
 # tool_icon: dna
 # tool_color: purple
+# tool_commands: pilon
+# tool_primary_command: pilon
+# tool_command_template: pilon --genome {assembly} --bam {bam_file} --output {output_prefix} {options}
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \

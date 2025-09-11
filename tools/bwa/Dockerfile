@@ -11,6 +11,9 @@ FROM ubuntu:22.04
 # tool_url: https://github.com/lh3/bwa
 # tool_icon: dna
 # tool_color: blue
+# tool_commands: bwa,index,mem,aln,samse,sampe,bwasw,bwtsw
+# tool_primary_command: bwa
+# tool_command_template: bwa {subcommand} {reference} {reads} {output_options}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

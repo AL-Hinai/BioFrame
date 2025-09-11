@@ -176,6 +176,12 @@ def extract_tool_info_from_dockerfile(dockerfile_path, tool_name):
                         tool_info['icon'] = value
                     elif key == 'tool_color':
                         tool_info['color'] = value
+                    elif key == 'tool_commands':
+                        tool_info['commands'] = [cmd.strip() for cmd in value.split(',')]
+                    elif key == 'tool_primary_command':
+                        tool_info['primary_command'] = value
+                    elif key == 'tool_command_template':
+                        tool_info['command_template'] = value
         
         # Ensure we have a valid tool name
         if tool_info['name'] == tool_name:
@@ -364,7 +370,100 @@ def run_tool_docker(tool_name, parameters):
         raise Exception(f"Docker execution error: {e}")
 
 def build_tool_command(tool_name, parameters):
-    """Build the command for a specific tool"""
+    """Build the command for a specific tool using metadata"""
+    # First, try to get tool metadata
+    tools = scan_tools_directory()
+    tool_info = None
+    for tool in tools:
+        if tool.get('name', '').lower() == tool_name.lower():
+            tool_info = tool
+            break
+    
+    if not tool_info:
+        # Fallback to hardcoded commands for backward compatibility
+        return build_legacy_tool_command(tool_name, parameters)
+    
+    # Use command template if available
+    if 'command_template' in tool_info:
+        command_template = tool_info['command_template']
+        primary_command = tool_info.get('primary_command', tool_name)
+        
+        # Build command from template
+        command_parts = [primary_command]
+        
+        # Handle different tool types based on their templates
+        if 'bedtools' in tool_name.lower():
+            subcommand = parameters.get('subcommand', 'intersect')
+            input_files = parameters.get('input_files', [])
+            output_options = parameters.get('output_options', [])
+            command_parts.extend([subcommand] + input_files + output_options)
+            
+        elif 'fastqc' in tool_name.lower():
+            input_files = parameters.get('input_files', [])
+            output_dir = parameters.get('output_dir', '/data/fastqc_output')
+            options = parameters.get('options', [])
+            command_parts.extend(input_files + ['-o', output_dir] + options)
+            
+        elif 'spades' in tool_name.lower():
+            read1 = parameters.get('read1', '')
+            read2 = parameters.get('read2', '')
+            output_dir = parameters.get('output_dir', '/data/spades_output')
+            options = parameters.get('options', [])
+            command_parts.extend(['-1', read1, '-2', read2, '-o', output_dir] + options)
+            
+        elif 'bwa' in tool_name.lower():
+            subcommand = parameters.get('subcommand', 'mem')
+            reference = parameters.get('reference', '')
+            reads = parameters.get('reads', [])
+            output_options = parameters.get('output_options', [])
+            command_parts.extend([subcommand, reference] + reads + output_options)
+            
+        elif 'samtools' in tool_name.lower():
+            subcommand = parameters.get('subcommand', 'view')
+            input_files = parameters.get('input_files', [])
+            output_options = parameters.get('output_options', [])
+            command_parts.extend([subcommand] + input_files + output_options)
+            
+        elif 'trimmomatic' in tool_name.lower():
+            mode = parameters.get('mode', 'PE')
+            input_files = parameters.get('input_files', [])
+            output_files = parameters.get('output_files', [])
+            trimming_options = parameters.get('trimming_options', [])
+            command_parts.extend([mode] + input_files + output_files + trimming_options)
+            
+        elif 'quast' in tool_name.lower():
+            assembly_files = parameters.get('assembly_files', [])
+            output_dir = parameters.get('output_dir', '/data/quast_output')
+            options = parameters.get('options', [])
+            command_parts.extend(assembly_files + ['-o', output_dir] + options)
+            
+        elif 'multiqc' in tool_name.lower():
+            input_dir = parameters.get('input_dir', '/data')
+            output_dir = parameters.get('output_dir', '/data/multiqc_output')
+            options = parameters.get('options', [])
+            command_parts.extend([input_dir, '-o', output_dir] + options)
+            
+        elif 'gatk' in tool_name.lower():
+            tool_name_gatk = parameters.get('tool_name', 'HaplotypeCaller')
+            input_files = parameters.get('input_files', [])
+            output_files = parameters.get('output_files', [])
+            options = parameters.get('options', [])
+            command_parts.extend([tool_name_gatk] + input_files + output_files + options)
+            
+        elif 'pilon' in tool_name.lower():
+            assembly = parameters.get('assembly', '')
+            bam_file = parameters.get('bam_file', '')
+            output_prefix = parameters.get('output_prefix', 'pilon_output')
+            options = parameters.get('options', [])
+            command_parts.extend(['--genome', assembly, '--bam', bam_file, '--output', output_prefix] + options)
+        
+        return command_parts
+    
+    # Fallback to legacy command building
+    return build_legacy_tool_command(tool_name, parameters)
+
+def build_legacy_tool_command(tool_name, parameters):
+    """Legacy command building for backward compatibility"""
     if tool_name == 'fastqc':
         input_files = parameters['input_files']
         output_dir = parameters.get('output_dir', f"/data/fastqc_output")
