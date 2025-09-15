@@ -360,11 +360,9 @@
                         
                         <!-- Orchestrator Logs Tab -->
                         <div id="orchestrator-logs-{{ tool.tool_name|lower }}" class="tool-log-content">
-                            <div class="bg-gray-900 text-green-400 p-3 font-mono text-xs h-64 overflow-y-auto">
-                                <div class="text-gray-500">
-                                    <i class="fas fa-terminal mr-2"></i>
-                                    Loading {{ tool.tool_name }} orchestrator logs...
-                                </div>
+                            <!-- Always show live monitoring -->
+                            <div id="live-logs-container" class="bg-black p-2 rounded font-mono text-xs h-64 overflow-y-auto">
+                                <div class="text-gray-500">Loading real-time monitoring...</div>
                             </div>
                         </div>
                         
@@ -868,30 +866,34 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (!logContent) return;
         
-        logContent.innerHTML = '<div class="text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading logs...</div>';
+        logContent.innerHTML = '<div class="text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading enhanced orchestrator logs...</div>';
         
         if (logType === 'orchestrator') {
-            // Fetch orchestrator logs
-            fetch(`/workflow/{{ workflow.id }}/tool-logs/${toolName}/`)
+            // Fetch enhanced orchestrator logs
+            fetch(`/workflow/{{ workflow.id }}/enhanced-tool-logs/${toolName}/`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success && data.logs) {
-                        let logHtml = '';
-                        data.logs.forEach(log => {
-                            const timestamp = new Date(log.timestamp).toLocaleTimeString();
-                            logHtml += `<div class="mb-1">
-                                <span class="text-gray-400 text-xs">[${timestamp}]</span>
-                                <span class="text-green-400">${log.message}</span>
-                            </div>`;
-                        });
-                        logContent.innerHTML = logHtml;
+                    if (data.success && data.data) {
+                        displayEnhancedToolLogs(logContent, data.data);
                     } else {
-                        logContent.innerHTML = '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
+                        // Fallback to basic logs if enhanced logs fail
+                        fetch(`/workflow/{{ workflow.id }}/tool-logs/${toolName}/`)
+                            .then(response => response.json())
+                            .then(fallbackData => {
+                                if (fallbackData.success && fallbackData.logs) {
+                                    displayBasicToolLogs(logContent, fallbackData.logs);
+                                } else {
+                                    logContent.innerHTML = '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
+                                }
+                            })
+                            .catch(() => {
+                                logContent.innerHTML = '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
+                            });
                     }
                 })
                 .catch(error => {
-                    console.error('Error fetching orchestrator logs:', error);
-                    logContent.innerHTML = '<div class="text-red-500">Error loading orchestrator logs</div>';
+                    console.error('Error fetching enhanced orchestrator logs:', error);
+                    logContent.innerHTML = '<div class="text-red-500">Error loading enhanced orchestrator logs</div>';
                 });
         } else {
             // Fetch tool log file
@@ -915,6 +917,178 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Error fetching tool log file:', error);
                     logContent.innerHTML = '<div class="text-red-500">Error loading tool log file</div>';
                 });
+        }
+    }
+    
+    function displayEnhancedToolLogs(container, data) {
+        let logHtml = '';
+        
+        // Display execution summary if available
+        if (data.execution_summary && Object.keys(data.execution_summary).length > 0) {
+            logHtml += '<div class="mb-4 p-3 bg-blue-900 border border-blue-700 rounded">';
+            logHtml += '<div class="text-blue-300 font-medium mb-2">📊 Execution Summary</div>';
+            if (data.execution_summary.success !== undefined) {
+                const status = data.execution_summary.success ? '✅ Success' : '❌ Failed';
+                logHtml += `<div class="text-sm text-green-400">Status: ${status}</div>`;
+            }
+            if (data.execution_summary.execution_time) {
+                logHtml += `<div class="text-sm text-yellow-400">Execution Time: ${data.execution_summary.execution_time.toFixed(2)}s</div>`;
+            }
+            if (data.execution_summary.output_files_count) {
+                logHtml += `<div class="text-sm text-cyan-400">Output Files: ${data.execution_summary.output_files_count}</div>`;
+            }
+            if (data.execution_summary.tool_version) {
+                logHtml += `<div class="text-sm text-purple-400">Tool Version: ${data.execution_summary.tool_version}</div>`;
+            }
+            if (data.execution_summary.memory_used) {
+                logHtml += `<div class="text-sm text-orange-400">Memory Used: ${data.execution_summary.memory_used}</div>`;
+            }
+            logHtml += '</div>';
+        }
+        
+        // Display container info if available
+        if (data.container_info && Object.keys(data.container_info).length > 0) {
+            logHtml += '<div class="mb-4 p-3 bg-purple-900 border border-purple-700 rounded">';
+            logHtml += '<div class="text-purple-300 font-medium mb-2">🐳 Container Information</div>';
+            if (data.container_info.status) {
+                const statusColor = data.container_info.status === 'success' ? 'text-green-400' : 'text-red-400';
+                logHtml += `<div class="text-sm ${statusColor}">Status: ${data.container_info.status}</div>`;
+            }
+            if (data.container_info.command) {
+                logHtml += `<div class="text-sm text-cyan-400">Command: ${data.container_info.command}</div>`;
+            }
+            logHtml += '</div>';
+        }
+        
+        // Display real-time container monitoring
+        if (data.running_containers && data.running_containers.length > 0) {
+            logHtml += '<div class="mb-4 p-3 bg-green-900 border border-green-700 rounded">';
+            logHtml += '<div class="text-green-300 font-medium mb-2">🔄 Real-time Container Monitoring</div>';
+            logHtml += '<div class="text-sm text-green-400 mb-2">Live Status: <span class="text-yellow-400">RUNNING</span></div>';
+            
+            data.running_containers.forEach(container => {
+                logHtml += '<div class="mb-2 p-2 bg-gray-800 border border-gray-600 rounded">';
+                logHtml += `<div class="text-sm text-cyan-400">Container: ${container.name || container.id}</div>`;
+                logHtml += `<div class="text-xs text-gray-300">ID: ${container.id}</div>`;
+                logHtml += `<div class="text-xs text-yellow-400">Status: ${container.status}</div>`;
+                if (container.started_at) {
+                    logHtml += `<div class="text-xs text-gray-400">Started: ${new Date(container.started_at).toLocaleString()}</div>`;
+                }
+                if (container.tool_name) {
+                    logHtml += `<div class="text-xs text-purple-400">Tool: ${container.tool_name}</div>`;
+                }
+                logHtml += '</div>';
+            });
+            logHtml += '</div>';
+        }
+        
+        // Display errors if any
+        if (data.errors && data.errors.length > 0) {
+            logHtml += '<div class="mb-4 p-3 bg-red-900 border border-red-700 rounded">';
+            logHtml += '<div class="text-red-300 font-medium mb-2">❌ Errors</div>';
+            data.errors.forEach(error => {
+                logHtml += `<div class="text-sm text-red-400">• ${error}</div>`;
+            });
+            logHtml += '</div>';
+        }
+        
+        // Display warnings if any
+        if (data.warnings && data.warnings.length > 0) {
+            logHtml += '<div class="mb-4 p-3 bg-yellow-900 border border-yellow-700 rounded">';
+            logHtml += '<div class="text-yellow-300 font-medium mb-2">⚠️ Warnings</div>';
+            data.warnings.forEach(warning => {
+                logHtml += `<div class="text-sm text-yellow-400">• ${warning}</div>`;
+            });
+            logHtml += '</div>';
+        }
+        
+        // Always show real-time container monitoring
+        logHtml += '<div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded">';
+        logHtml += '<div class="text-blue-300 font-bold mb-2">🔄 Real-time Container Monitoring</div>';
+        
+        if (data.running_containers && data.running_containers.length > 0) {
+            data.running_containers.forEach(container => {
+                // Calculate running duration
+                const createdTime = new Date(container.created);
+                const now = new Date();
+                const duration = Math.floor((now - createdTime) / 1000);
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                const durationText = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+                
+                // Display container status in the specified format
+                logHtml += '<div class="text-sm text-blue-200 mb-2">';
+                logHtml += `<div class="font-semibold text-green-400">Live Status: RUNNING</div>`;
+                logHtml += `<div>Container: ${container.name}</div>`;
+                logHtml += `<div>ID: ${container.id}</div>`;
+                logHtml += `<div>Status: Up ${durationText}</div>`;
+                logHtml += `<div>Tool: ${container.tool_name || 'unknown'}</div>`;
+                logHtml += '</div>';
+            });
+        } else {
+            logHtml += '<div class="text-yellow-400">No running containers found for this workflow.</div>';
+        }
+        
+        logHtml += '</div>';
+        
+        // Show existing orchestrator logs
+        if (data.orchestrator_logs && data.orchestrator_logs.length > 0) {
+            data.orchestrator_logs.forEach(log => {
+                const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                const levelColor = getLevelColor(log.level);
+                const typeIcon = getTypeIcon(log.type);
+                
+                logHtml += `<div class="mb-1 text-xs">
+                    <span class="text-gray-400">[${timestamp}]</span>
+                    <span class="text-blue-400">${typeIcon}</span>
+                    <span class="${levelColor}">${log.message}</span>
+                </div>`;
+            });
+        }
+        
+        // Note: Live monitoring is handled by the main live-logs-container element
+        if (!data.orchestrator_logs || data.orchestrator_logs.length === 0) {
+            logHtml += '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
+        }
+        
+        logHtml += '</div>';
+        
+        container.innerHTML = logHtml;
+    }
+    
+    function displayBasicToolLogs(container, logs) {
+        let logHtml = '';
+        logs.forEach(log => {
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            const levelColor = getLevelColor(log.level);
+            logHtml += `<div class="mb-1 text-xs">
+                <span class="text-gray-400">[${timestamp}]</span>
+                <span class="${levelColor}">${log.message}</span>
+            </div>`;
+        });
+        container.innerHTML = logHtml;
+    }
+    
+    function getLevelColor(level) {
+        switch(level.toLowerCase()) {
+            case 'error': return 'text-red-400';
+            case 'warning': return 'text-yellow-400';
+            case 'info': return 'text-green-400';
+            case 'debug': return 'text-blue-400';
+            default: return 'text-green-400';
+        }
+    }
+    
+    function getTypeIcon(type) {
+        switch(type) {
+            case 'step_start': return '🚀';
+            case 'step_completion': return '✅';
+            case 'container': return '🐳';
+            case 'progress': return '📊';
+            case 'error': return '❌';
+            case 'warning': return '⚠️';
+            case 'step_result': return '📄';
+            default: return '📋';
         }
     }
     
@@ -1206,9 +1380,191 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.removeChild(link);
     }
     
+    // Live monitoring variables
+    let liveLogsInterval = null;
+    let isLiveMonitoring = false;
+    
+    function startLiveLogs() {
+        if (isLiveMonitoring) return;
+        
+        const container = document.getElementById('live-logs-container');
+        if (!container) return;
+        
+        isLiveMonitoring = true;
+        container.innerHTML = '<div class="text-green-400">🔄 Starting live monitoring...</div>';
+        
+        // Start polling for live logs
+        liveLogsInterval = setInterval(() => {
+            fetchLiveLogs();
+        }, 2000); // Poll every 2 seconds
+        
+        // Initial fetch
+        fetchLiveLogs();
+    }
+    
+    function stopLiveLogs() {
+        if (liveLogsInterval) {
+            clearInterval(liveLogsInterval);
+            liveLogsInterval = null;
+        }
+        
+        isLiveMonitoring = false;
+        
+        const container = document.getElementById('live-logs-container');
+        if (container) {
+            container.innerHTML = '<div class="text-gray-500">Live monitoring stopped.</div>';
+        }
+    }
+    
+    // Store last known container info for persistence
+    let lastKnownContainerInfo = null;
+    
+    function fetchLiveLogs() {
+        const workflowId = '{{ workflow.id }}';
+        const container = document.getElementById('live-logs-container');
+        if (!container) {
+            console.error('live-logs-container not found!');
+            return;
+        }
+        
+        // Get running containers for this workflow
+        fetch(`/workflow/${workflowId}/running-containers/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.containers && data.containers.length > 0) {
+                    // Update last known container info
+                    lastKnownContainerInfo = data.containers[0];
+                    
+                    data.containers.forEach(containerInfo => {
+                        // Calculate running duration
+                        const createdTime = new Date(containerInfo.created);
+                        const now = new Date();
+                        const duration = Math.floor((now - createdTime) / 1000);
+                        const minutes = Math.floor(duration / 60);
+                        const seconds = duration % 60;
+                        const durationText = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+                        
+                        // Update container status smoothly
+                        updateContainerStatus(container, containerInfo, durationText, 'RUNNING', 'text-green-400');
+                        
+                        // Fetch logs for each running container
+                        fetch(`/workflow/${workflowId}/container-logs/${containerInfo.id}/`)
+                            .then(response => response.json())
+                            .then(logData => {
+                                if (logData.success && logData.logs) {
+                                    updateLiveOutput(container, logData.logs);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching container logs:', error);
+                            });
+                    });
+                } else {
+                    // Show last known container info even when no containers are running
+                    if (lastKnownContainerInfo) {
+                        updateContainerStatus(container, lastKnownContainerInfo, 'Completed', 'FINISHED', 'text-yellow-400');
+                        updateStatusMessage(container, 'Container has finished running. Monitoring for new containers...', 'text-gray-400');
+                    } else {
+                        updateStatusMessage(container, 'No running containers found for this workflow.', 'text-yellow-400');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching running containers:', error);
+                if (lastKnownContainerInfo) {
+                    updateContainerStatus(container, lastKnownContainerInfo, 'Completed', 'FINISHED', 'text-yellow-400');
+                    updateStatusMessage(container, 'Error connecting to live logs. Retrying...', 'text-red-400');
+                } else {
+                    updateStatusMessage(container, 'Error connecting to live logs. Retrying...', 'text-red-400');
+                }
+            });
+    }
+    
+    function updateContainerStatus(container, containerInfo, statusText, liveStatus, statusColor) {
+        // Find or create the monitoring section
+        let monitoringSection = container.querySelector('.monitoring-section');
+        if (!monitoringSection) {
+            container.innerHTML = `
+                <div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded monitoring-section">
+                    <div class="text-blue-300 font-bold mb-2">🔄 Real-time Container Monitoring</div>
+                    <div class="container-status"></div>
+                </div>
+            `;
+            monitoringSection = container.querySelector('.monitoring-section');
+        }
+        
+        const statusDiv = monitoringSection.querySelector('.container-status');
+        statusDiv.innerHTML = `
+            <div class="text-sm text-blue-200 mb-2">
+                <div class="font-semibold ${statusColor}">Live Status: ${liveStatus}</div>
+                <div>Container: ${containerInfo.name}</div>
+                <div>ID: ${containerInfo.id}</div>
+                <div>Status: ${statusText}</div>
+                <div>Tool: ${containerInfo.tool_name || 'unknown'}</div>
+            </div>
+        `;
+    }
+    
+    function updateStatusMessage(container, message, colorClass) {
+        let statusMessage = container.querySelector('.status-message');
+        if (!statusMessage) {
+            const monitoringSection = container.querySelector('.monitoring-section');
+            if (monitoringSection) {
+                monitoringSection.innerHTML += `<div class="status-message text-sm"></div>`;
+                statusMessage = monitoringSection.querySelector('.status-message');
+            }
+        }
+        if (statusMessage) {
+            statusMessage.innerHTML = `<div class="${colorClass}">${message}</div>`;
+        }
+    }
+    
+    function updateLiveOutput(container, logs) {
+        // Find or create the live output section
+        let outputSection = container.querySelector('.live-output-section');
+        if (!outputSection) {
+            const monitoringSection = container.querySelector('.monitoring-section');
+            if (monitoringSection) {
+                monitoringSection.innerHTML += `
+                    <div class="mt-2 p-2 bg-black rounded live-output-section">
+                        <div class="text-green-300 font-medium mb-1">📡 Live Tool Output:</div>
+                        <div class="live-logs"></div>
+                    </div>
+                `;
+                outputSection = monitoringSection.querySelector('.live-output-section');
+            }
+        }
+        
+        if (outputSection) {
+            const logsDiv = outputSection.querySelector('.live-logs');
+            const lines = logs.split('\n').slice(-15); // Last 15 lines
+            let logHtml = '';
+            
+            lines.forEach(line => {
+                if (line.trim()) {
+                    const timestamp = new Date().toLocaleTimeString();
+                    logHtml += `<div class="text-green-400 text-xs">[${timestamp}] ${line}</div>`;
+                }
+            });
+            
+            logsDiv.innerHTML = logHtml;
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+    
     // Auto-load enhanced issues analysis when page loads
     document.addEventListener('DOMContentLoaded', function() {
         refreshIssuesAnalysis();
+        
+        // Always start live monitoring automatically
+        setTimeout(() => {
+            startLiveLogs();
+        }, 1000);
+    });
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        stopLiveLogs();
     });
 </script>
 {% endblock %}

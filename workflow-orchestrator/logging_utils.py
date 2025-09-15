@@ -151,7 +151,7 @@ class DynamicWorkflowLogger:
                     self.logger.info(f"     Type: VCF variant data")
                 else:
                     self.logger.info(f"     Type: {input_path.suffix} file")
-        else:
+            else:
                 self.logger.warning(f"  ⚠️  Input {i+1}: {input_path.name} (FILE NOT FOUND)")
                 
     def log_step_progress(self, step_number: int, tool_name: str, message: str, 
@@ -285,10 +285,33 @@ class DynamicWorkflowLogger:
                 
     def cleanup(self):
         """Clean up logging handlers"""
-        for handler in [self.workflow_handler, self.execution_handler, 
-                       self.tools_handler, self.error_handler, self.console_handler]:
-            self.logger.removeHandler(handler)
-            handler.close()
+        for handler in [self.execution_handler, self.error_handler, self.console_handler]:
+            if handler:
+                self.logger.removeHandler(handler)
+                handler.close()
+    
+    def save_enhanced_issues_log(self, workflow_id: str, run_dir: Path, crash_details: Dict[str, Any] = None):
+        """Save enhanced issues analysis to log file with optional crash details"""
+        try:
+            issues_log_file = run_dir / "logs" / "workflow_issues.log"
+            issues_log_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(issues_log_file, 'w') as f:
+                f.write("=" * 80 + "\n")
+                f.write("WORKFLOW ISSUES & FAILURES LOG\n")
+                f.write(f"Generated: {datetime.now().isoformat()}\n")
+                f.write("=" * 80 + "\n\n")
+                
+                if crash_details:
+                    f.write(f"🚨 Workflow failed with error:\n")
+                    f.write(f"Error Type: {crash_details.get('error_type', 'Unknown')}\n")
+                    f.write(f"Error Message: {crash_details.get('error_message', 'No message')}\n")
+                    f.write(f"Stack Trace:\n{crash_details.get('stack_trace', 'No stack trace')}\n\n")
+                else:
+                    f.write("✅ No issues detected - workflow completed successfully!\n\n")
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to save enhanced issues log: {e}")
 
 
 class DynamicToolExecutor:
@@ -431,8 +454,8 @@ class DynamicToolExecutor:
         self.logger.log_step_progress(1, tool_name, f"Executing {tool_name} via Docker: {' '.join(docker_cmd)}")
         
         try:
-            # Execute Docker command directly
-            result = subprocess.run(docker_cmd, capture_output=True, text=True, timeout=3600)
+            # Execute Docker command directly (no timeout - let tools run as long as needed)
+            result = subprocess.run(docker_cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
                 # Get output files
@@ -444,9 +467,6 @@ class DynamicToolExecutor:
                     f"REAL Docker execution failed: {result.stderr}", "ERROR")
                 return False, []
                 
-        except subprocess.TimeoutExpired:
-            self.logger.log_step_progress(1, tool_name, "REAL Docker execution timed out", "ERROR")
-            return False, []
         except Exception as e:
             self.logger.log_step_progress(1, tool_name, f"REAL Docker execution error: {str(e)}", "ERROR")
             return False, []

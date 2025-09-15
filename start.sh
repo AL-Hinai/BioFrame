@@ -6,6 +6,13 @@
 echo "🚀 Starting BioFrame System..."
 echo "=============================="
 
+# Configure Docker for Git Bash environment with BuildKit optimizations
+echo "🔧 Configuring Docker settings for Git Bash..."
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+echo "✅ BuildKit enabled for faster builds with parallel processing and better caching"
+
+
 # Function to check and start Docker
 check_and_start_docker() {
     echo "🔍 Checking Docker status..."
@@ -98,9 +105,9 @@ fi
 echo "✅ Docker and Docker Compose are available"
 
 
-# Build all containers with reduced parallelism
-echo "🔨 Building all containers..."
-docker-compose build --parallel 2
+# Build all containers with BuildKit parallel processing
+echo "🔨 Building all containers with parallel processing..."
+docker-compose build --parallel
 
 if [ $? -ne 0 ]; then
     echo "❌ Failed to build containers. Please check the error messages above."

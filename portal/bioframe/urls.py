@@ -22,7 +22,16 @@ urlpatterns = [
     path('workflow/<str:workflow_id>/rerun/', views.rerun_workflow, name='rerun_workflow'),
     path('workflow/<str:workflow_id>/rerun/<int:step_number>/', views.rerun_workflow_from_step, name='rerun_workflow_from_step'),
     path('workflow/<str:workflow_id>/tool-logs/<str:tool_name>/', views.get_tool_logs, name='get_tool_logs'),
+    path('workflow/<str:workflow_id>/enhanced-tool-logs/<str:tool_name>/', views.get_enhanced_tool_logs, name='get_enhanced_tool_logs'),
     path('workflow/<str:workflow_id>/tool-log-file/<str:tool_name>/', views.get_tool_log_file, name='get_tool_log_file'),
+    path('workflow/<str:workflow_id>/running-containers/', views.get_running_containers, name='get_running_containers'),
+    path('workflow/<str:workflow_id>/container-logs/<str:container_id>/', views.get_container_logs, name='get_container_logs'),
+    
+    # Enhanced workflow upload URLs - simplified file-based approach
+    path('workflow/start-upload/<str:template_id>/', views.start_workflow_with_upload, name='start_workflow_with_upload'),
+    path('workflow/upload-file/<str:run_id>/', views.upload_workflow_file, name='upload_workflow_file'),
+    path('workflow/upload-progress/<str:run_id>/', views.get_workflow_upload_progress, name='get_workflow_upload_progress'),
+    path('workflow/validate-and-start/<str:run_id>/', views.validate_and_start_workflow, name='validate_and_start_workflow'),
     path('workflow/<str:workflow_id>/issues-log/', views.get_workflow_issues_log, name='get_workflow_issues_log'),
     path('workflow/<str:workflow_id>/issues-log/download/', views.download_workflow_issues_log, name='download_workflow_issues_log'),
     path('workflow/<str:workflow_id>/execution-log/', views.get_workflow_execution_log, name='get_workflow_execution_log'),

@@ -25,9 +25,8 @@
                 <div class="bg-white shadow rounded-lg p-6">
                     <h2 class="text-xl font-semibold text-gray-900 mb-6">Run Configuration</h2>
                     
-                    <form method="post" enctype="multipart/form-data" id="workflow-form">
-                        {% csrf_token %}
-                        
+                    <!-- Enhanced Upload Form -->
+                    <div id="upload-form">
                         <!-- Basic Information -->
                         <div class="space-y-6">
                             <div>
@@ -161,11 +160,11 @@
                         
                         <!-- Submit Button -->
                         <div class="mt-8 flex justify-end">
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-md transition duration-200 text-lg">
+                            <button type="button" id="start-workflow-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-md transition duration-200 text-lg">
                                 <i class="fas fa-play mr-2"></i>Start Workflow Pipeline
                             </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
             
@@ -269,6 +268,102 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Progress Modal -->
+<div id="upload-progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Uploading Files & Queuing Workflow</h3>
+                <button id="close-modal" class="text-gray-400 hover:text-gray-600 hidden">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Progress Section -->
+            <div class="space-y-6">
+                <!-- Overall Progress -->
+                <div>
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span>Overall Progress</span>
+                        <span id="overall-progress-text">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div id="overall-progress-bar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <!-- Upload Status -->
+                <div id="upload-status" class="text-center py-4">
+                    <div class="inline-flex items-center">
+                        <i class="fas fa-spinner fa-spin text-blue-500 mr-2"></i>
+                        <span class="text-gray-700">Preparing upload...</span>
+                    </div>
+                </div>
+                
+                <!-- File List -->
+                <div id="file-list-container" class="max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    <h4 class="font-medium text-gray-900 mb-3">Uploading Files</h4>
+                    <div id="file-list" class="space-y-2">
+                        <!-- Files will be added here dynamically -->
+                    </div>
+                </div>
+                
+                <!-- Validation Status -->
+                <div id="validation-status" class="hidden">
+                    <div class="flex items-center justify-center py-4">
+                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                        <span class="text-gray-700">Validating files...</span>
+                    </div>
+                </div>
+                
+                <!-- Workflow Start Status -->
+                <div id="workflow-start-status" class="hidden">
+                    <div class="flex items-center justify-center py-4">
+                        <i class="fas fa-cogs fa-spin text-purple-500 mr-2"></i>
+                        <span class="text-gray-700">Queuing workflow for execution...</span>
+                    </div>
+                </div>
+                
+                <!-- Success Status -->
+                <div id="success-status" class="hidden text-center py-4">
+                    <div class="inline-flex items-center">
+                        <i class="fas fa-check-circle text-green-500 mr-2 text-2xl"></i>
+                        <div>
+                            <h4 class="text-lg font-medium text-gray-900">Workflow Queued Successfully!</h4>
+                            <p class="text-sm text-gray-600">Your workflow has been queued for execution. The orchestrator service will process it automatically.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Error Status -->
+                <div id="error-status" class="hidden text-center py-4">
+                    <div class="inline-flex items-center">
+                        <i class="fas fa-exclamation-circle text-red-500 mr-2 text-2xl"></i>
+                        <div>
+                            <h4 class="text-lg font-medium text-gray-900">Upload Failed</h4>
+                            <p id="error-message" class="text-sm text-gray-600"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex justify-end mt-6 space-x-3">
+                <button id="cancel-upload" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                    Cancel
+                </button>
+                <button id="retry-upload" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 hidden">
+                    Retry
+                </button>
+                <button id="view-workflow" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 hidden">
+                    View Workflow
+                </button>
             </div>
         </div>
     </div>
@@ -468,40 +563,266 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Form validation
-document.getElementById('workflow-form').addEventListener('submit', function(e) {
+// Enhanced workflow upload functionality
+let uploadSessionId = null;
+let uploadInterval = null;
+
+document.getElementById('start-workflow-btn').addEventListener('click', function() {
     const runName = document.getElementById('run_name').value.trim();
+    const runDescription = document.getElementById('run_description').value.trim();
     const primaryFiles = document.getElementById('primary-files').files;
     
     if (!runName) {
-        e.preventDefault();
         alert('Please provide a run name');
         return;
     }
     
     if (primaryFiles.length === 0) {
-        e.preventDefault();
         alert('Please upload at least one primary input file to start the pipeline.');
         return;
     }
     
-    // Show confirmation with pipeline details
+    // Show confirmation
     const toolCount = {{ template.tools|length }};
     const templateName = '{{ template.name }}';
     
-    if (!confirm(`Start "${templateName}" pipeline with ${toolCount} tools?\n\nPrimary files will be processed by {{ template.tools.0|title }}, and outputs will automatically flow through the pipeline.`)) {
-        e.preventDefault();
+    if (!confirm(`Start "${templateName}" pipeline with ${toolCount} tools?\n\nFiles will be uploaded and the pipeline will be queued for execution by the orchestrator service.`)) {
         return;
     }
     
-    // Show loading state
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting Pipeline...';
+    // Start the upload process
+    startWorkflowUpload(runName, runDescription, primaryFiles);
+});
+
+async function startWorkflowUpload(runName, runDescription, files) {
+    try {
+        // Show modal
+        showUploadModal();
+        
+        // Prepare file data
+        const fileData = Array.from(files).map(file => ({
+            name: file.name,
+            size: file.size,
+            type: file.type
+        }));
+        
+        // Start upload session
+        const response = await fetch(`/workflow/start-upload/{{ template.id }}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                run_name: runName,
+                run_description: runDescription,
+                files: fileData
+            })
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+        
+        uploadSessionId = result.run_id;
+        updateFileList(files);
+        
+        // Start uploading files
+        await uploadFiles(files);
+        
+        // Validate and start workflow
+        await validateAndStartWorkflow();
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        showError(error.message);
+    }
+}
+
+async function uploadFiles(files) {
+    const fileArray = Array.from(files);
     
-    // Allow form to submit naturally - don't prevent default
-    // The form will submit and redirect to workflow details page
-    return true;
+    for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch(`/workflow/upload-file/${uploadSessionId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: formData
+            });
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+            
+            // Update file progress in UI
+            updateFileProgress(file.name, 100, 'completed');
+            
+        } catch (error) {
+            console.error(`Error uploading ${file.name}:`, error);
+            updateFileProgress(file.name, 0, 'failed');
+            throw error;
+        }
+    }
+}
+
+async function validateAndStartWorkflow() {
+    try {
+        // Show validation status
+        document.getElementById('validation-status').classList.remove('hidden');
+        document.getElementById('upload-status').classList.add('hidden');
+        
+        const response = await fetch(`/workflow/validate-and-start/${uploadSessionId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+        
+        // Show workflow start status
+        document.getElementById('validation-status').classList.add('hidden');
+        document.getElementById('workflow-start-status').classList.remove('hidden');
+        
+        // Show success immediately since workflow is queued for execution
+        document.getElementById('workflow-start-status').classList.add('hidden');
+        document.getElementById('success-status').classList.remove('hidden');
+        
+        // Update success message for new async workflow
+        const successStatus = document.getElementById('success-status');
+        const successMessage = successStatus.querySelector('h4');
+        const successDescription = successStatus.querySelector('p');
+        
+        successMessage.textContent = 'Workflow Queued Successfully!';
+        successDescription.textContent = 'Your workflow has been queued for execution. The orchestrator service will process it automatically.';
+        
+        // Redirect to workflow details
+        setTimeout(() => {
+            window.location.href = result.redirect_url;
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Validation/start error:', error);
+        showError(error.message);
+    }
+}
+
+function showUploadModal() {
+    document.getElementById('upload-progress-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function hideUploadModal() {
+    document.getElementById('upload-progress-modal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function updateFileList(files) {
+    const fileList = document.getElementById('file-list');
+    fileList.innerHTML = '';
+    
+    Array.from(files).forEach(file => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'flex items-center justify-between p-3 bg-white border border-gray-200 rounded-md text-sm';
+        fileItem.innerHTML = `
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <i class="fas fa-file text-white text-xs"></i>
+                </div>
+                <div>
+                    <span class="font-medium text-gray-700">${file.name}</span>
+                    <p class="text-xs text-gray-500">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <div class="w-16 bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <span class="text-xs text-gray-500">0%</span>
+            </div>
+        `;
+        fileItem.id = `file-${file.name}`;
+        fileList.appendChild(fileItem);
+    });
+}
+
+function updateFileProgress(fileName, progress, status) {
+    const fileItem = document.getElementById(`file-${fileName}`);
+    if (fileItem) {
+        const progressBar = fileItem.querySelector('.bg-blue-600');
+        const progressText = fileItem.querySelector('.text-xs');
+        
+        progressBar.style.width = `${progress}%`;
+        progressText.textContent = `${progress}%`;
+        
+        if (status === 'completed') {
+            progressBar.classList.add('bg-green-600');
+            progressBar.classList.remove('bg-blue-600');
+        } else if (status === 'failed') {
+            progressBar.classList.add('bg-red-600');
+            progressBar.classList.remove('bg-blue-600');
+        }
+    }
+    
+    // Update overall progress
+    updateOverallProgress();
+}
+
+function updateOverallProgress() {
+    const fileItems = document.querySelectorAll('#file-list > div');
+    let totalProgress = 0;
+    
+    fileItems.forEach(item => {
+        const progressText = item.querySelector('.text-xs');
+        const progress = parseInt(progressText.textContent);
+        totalProgress += progress;
+    });
+    
+    const overallProgress = Math.round(totalProgress / fileItems.length);
+    document.getElementById('overall-progress-bar').style.width = `${overallProgress}%`;
+    document.getElementById('overall-progress-text').textContent = `${overallProgress}%`;
+}
+
+function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-status').classList.remove('hidden');
+    document.getElementById('upload-status').classList.add('hidden');
+    document.getElementById('validation-status').classList.add('hidden');
+    document.getElementById('workflow-start-status').classList.add('hidden');
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Modal event listeners
+document.getElementById('close-modal').addEventListener('click', hideUploadModal);
+document.getElementById('cancel-upload').addEventListener('click', hideUploadModal);
+document.getElementById('retry-upload').addEventListener('click', function() {
+    hideUploadModal();
+    // Retry logic can be implemented here
 });
 </script>
 {% endblock %}
