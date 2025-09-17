@@ -165,6 +165,7 @@ services:
       - ./data:/data
       - ./workflows:/workflows
       - ./logs:/logs
+      - ./tools:/workflow/tools
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock

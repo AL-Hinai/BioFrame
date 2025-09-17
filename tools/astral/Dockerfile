@@ -13,7 +13,7 @@ FROM openjdk:11-jre-slim
 # tool_color: red
 # tool_commands: java
 # tool_primary_command: java
-# tool_command_template: java -jar /usr/local/bin/astral.jar -i {input_files} -o {output_file} {options}
+# tool_command_template: java -jar /usr/local/bin/astral.jar -i {input_file_1} -o {output_dir}/species_tree.newick
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

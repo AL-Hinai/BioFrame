@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: purple
 # tool_commands: mafft
 # tool_primary_command: mafft
-# tool_command_template: mafft {input_files} > {output_file}
+# tool_command_template: mafft {input_file_1} > {output_dir}/alignment.fasta
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

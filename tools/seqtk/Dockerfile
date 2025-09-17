@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: gray
 # tool_commands: seqtk
 # tool_primary_command: seqtk
-# tool_command_template: seqtk {subcommand} {input_files} {options} > {output_file}
+# tool_command_template: seqtk seq -A {input_file_1} > {output_dir}/converted.fasta
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

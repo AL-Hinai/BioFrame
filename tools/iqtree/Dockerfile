@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: green
 # tool_commands: iqtree2, iqtree
 # tool_primary_command: iqtree2
-# tool_command_template: iqtree2 -s {input_files} -o {output_dir} {options}
+# tool_command_template: iqtree2 -s {input_file_1} -pre {output_dir}/phylo_tree
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

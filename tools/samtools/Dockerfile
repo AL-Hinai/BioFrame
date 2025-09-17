@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: purple
 # tool_commands: samtools,view,sort,index,merge,flagstat,stats,coverage,mpileup,consensus,faidx,fixmate,calmd,markdup,rmdup,addreplacerg,merge,split,quickcheck,cat,reheader,reset,collate,phase,stats,coverage,mpileup,consensus,faidx,fixmate,calmd,markdup,rmdup,addreplacerg,merge,split,quickcheck,cat,reheader,reset,collate,phase
 # tool_primary_command: samtools
-# tool_command_template: samtools {subcommand} {input_files} {output_options}
+# tool_command_template: samtools sort -@ 4 {input_file_1} -o {output_dir}/sorted.bam && samtools index {output_dir}/sorted.bam
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

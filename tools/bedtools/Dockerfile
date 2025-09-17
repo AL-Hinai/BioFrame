@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: teal
 # tool_commands: intersect,union,subtract,merge,coverage,getfasta,slop,flank,closest,window,map,groupby,annotate,genomecov,merge,subtract,complement,shift,shuffle,random,makewindows,getfasta,getoverlap,closest,window,map,groupby,annotate,genomecov,merge,subtract,complement,shift,shuffle,random,makewindows
 # tool_primary_command: bedtools
-# tool_command_template: bedtools {subcommand} {input_files} {output_options}
+# tool_command_template: bedtools intersect -a {input_file_1} -b {input_file_2} > {output_dir}/intersection.bed
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

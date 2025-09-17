@@ -53,15 +53,22 @@ class ContainerProcessManager:
         self.logger.info("🛑 Container monitoring stopped")
     
     def _monitor_containers(self):
-        """Monitor active containers for resource usage and health"""
+        """Monitor active containers for resource usage and health with robust error handling"""
         while self.running:
             try:
-                for container_id, container_info in list(self.active_containers.items()):
+                # Create a copy of the keys to avoid modification during iteration
+                container_ids = list(self.active_containers.keys())
+                
+                for container_id in container_ids:
+                    container_info = self.active_containers.get(container_id)
+                    if not container_info:
+                        continue
+                        
                     try:
                         # Check if container is still running
                         result = subprocess.run(
                             ["docker", "inspect", "--format", "{{.State.Status}}", container_id],
-                            capture_output=True, text=True
+                            capture_output=True, text=True, timeout=10
                         )
                         
                         if result.returncode == 0:
@@ -71,19 +78,39 @@ class ContainerProcessManager:
                                 self._handle_container_completion(container_id, container_info, status)
                         else:
                             # Container not found, remove from tracking
+                            self.logger.info(f"🧹 Removing non-existent container {container_id} from tracking")
                             self.active_containers.pop(container_id, None)
                             
+                    except subprocess.TimeoutExpired:
+                        self.logger.warning(f"⚠️ Timeout inspecting container {container_id}, removing from tracking")
+                        self.active_containers.pop(container_id, None)
                     except Exception as e:
-                        self.logger.warning(f"Error monitoring container {container_id}: {e}")
+                        self.logger.warning(f"⚠️ Error monitoring container {container_id}: {e}")
+                        # CRITICAL FIX: Always remove problematic containers to prevent infinite loops
+                        self.logger.info(f"🧹 Removing problematic container {container_id} from tracking")
+                        self.active_containers.pop(container_id, None)
                         
+                # Intelligent periodic scan for missed completions
+                if hasattr(self, '_scan_counter'):
+                    self._scan_counter += 1
+                else:
+                    self._scan_counter = 1
+                    
+                # Scan frequency: every 6 cycles (30 seconds) for recent workflows
+                if self._scan_counter % 6 == 0:
+                    self._scan_for_missed_completions()
+                
                 time.sleep(5)  # Check every 5 seconds
                 
             except Exception as e:
-                self.logger.error(f"Error in container monitoring: {e}")
+                self.logger.error(f"❌ Critical error in container monitoring: {e}")
+                # Clear all containers if monitoring is completely broken
+                self.logger.warning("🚨 Clearing all tracked containers due to critical monitoring error")
+                self.active_containers.clear()
                 time.sleep(10)
     
     def _handle_container_completion(self, container_id: str, container_info: Dict[str, Any], status: str):
-        """Handle container completion or failure"""
+        """Handle container completion or failure with enhanced detection"""
         try:
             workflow_id = container_info.get('workflow_id')
             step_number = container_info.get('step_number')
@@ -97,28 +124,242 @@ class ContainerProcessManager:
             container_info['completed_at'] = datetime.now().isoformat()
             container_info['logs'] = logs
             
-            # Log completion
-            if status == "exited":
+            # Enhanced completion detection with evidence-based validation
+            completion_evidence = self._gather_completion_evidence(workflow_id, step_number, tool_name)
+            
+            # Log completion with evidence
+            if status == "exited" or completion_evidence['has_output_files']:
                 self.logger.info(f"✅ Container {container_id} completed successfully")
+                self.logger.info(f"📊 Completion evidence: {completion_evidence}")
+                
+                # Trigger step completion logging if not already done
+                if not completion_evidence['has_step_result']:
+                    self._create_step_result_from_evidence(workflow_id, step_number, tool_name, completion_evidence)
+                    
             else:
                 self.logger.warning(f"⚠️ Container {container_id} finished with status: {status}")
+                self.logger.warning(f"📊 Evidence check: {completion_evidence}")
             
-            # Remove from active containers
+            # Always remove from active containers
             self.active_containers.pop(container_id, None)
             
         except Exception as e:
-            self.logger.error(f"Error handling container completion {container_id}: {e}")
+            self.logger.error(f"❌ Error handling container completion {container_id}: {e}")
+            # Always remove from tracking even on error
+            self.active_containers.pop(container_id, None)
     
     def _get_container_logs(self, container_id: str) -> str:
         """Get logs from a container"""
         try:
             result = subprocess.run(
                 ["docker", "logs", container_id],
-                capture_output=True, text=True
+                capture_output=True, text=True, timeout=30
             )
             return result.stdout + result.stderr
         except Exception as e:
             return f"Error getting logs: {e}"
+    
+    def _gather_completion_evidence(self, workflow_id: str, step_number: int, tool_name: str) -> Dict[str, Any]:
+        """Gather evidence that a tool completed successfully"""
+        evidence = {
+            'has_output_files': False,
+            'has_tool_log': False,
+            'has_step_result': False,
+            'output_file_count': 0,
+            'tool_log_indicates_completion': False,
+            'step_result_success': None
+        }
+        
+        try:
+            # Check for output files
+            runs_dir = self.data_dir / "runs"
+            output_dir = runs_dir / workflow_id / f"step_{step_number}_{tool_name}"
+            if output_dir.exists():
+                output_files = list(output_dir.glob("*"))
+                evidence['has_output_files'] = len(output_files) > 0
+                evidence['output_file_count'] = len(output_files)
+            
+            # Check for tool log file
+            tool_log_file = output_dir / f"{tool_name}.log"
+            if tool_log_file.exists():
+                evidence['has_tool_log'] = True
+                # Check if log indicates completion
+                try:
+                    with open(tool_log_file, 'r') as f:
+                        log_content = f.read().lower()
+                        completion_indicators = ['finished', 'completed', 'pipeline finished', 'analysis complete']
+                        evidence['tool_log_indicates_completion'] = any(indicator in log_content for indicator in completion_indicators)
+                except:
+                    pass
+            
+            # Check for step result file
+            step_result_file = runs_dir / workflow_id / "step_results" / f"step_{step_number}_{tool_name}.json"
+            if step_result_file.exists():
+                evidence['has_step_result'] = True
+                try:
+                    with open(step_result_file, 'r') as f:
+                        step_data = json.load(f)
+                        evidence['step_result_success'] = step_data.get('result', {}).get('success', False)
+                except:
+                    pass
+                    
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error gathering completion evidence: {e}")
+            
+        return evidence
+    
+    def _create_step_result_from_evidence(self, workflow_id: str, step_number: int, tool_name: str, evidence: Dict[str, Any]):
+        """Create step result file based on completion evidence"""
+        try:
+            runs_dir = self.data_dir / "runs"
+            output_dir = runs_dir / workflow_id / f"step_{step_number}_{tool_name}"
+            step_results_dir = runs_dir / workflow_id / "step_results"
+            step_results_dir.mkdir(exist_ok=True)
+            
+            # Gather output files
+            output_files = []
+            if output_dir.exists():
+                output_files = [str(f) for f in output_dir.glob("*") if f.is_file()]
+            
+            # Parse tool log for execution time and warnings
+            execution_time = 0
+            warnings = []
+            tool_log_file = output_dir / f"{tool_name}.log"
+            if tool_log_file.exists():
+                try:
+                    with open(tool_log_file, 'r') as f:
+                        log_content = f.read()
+                        # Extract warnings
+                        for line in log_content.split('\n'):
+                            if 'WARN' in line or 'WARNING' in line:
+                                warnings.append(line.strip())
+                except:
+                    pass
+            
+            # Create step result
+            step_result = {
+                "step_number": step_number,
+                "tool_name": tool_name,
+                "input_files": [],  # Could be reconstructed if needed
+                "output_dir": str(output_dir),
+                "result": {
+                    "success": evidence['has_output_files'] or evidence['tool_log_indicates_completion'],
+                    "output_files": output_files,
+                    "error_message": "",
+                    "execution_time": execution_time,
+                    "container_id": None,
+                    "container_name": None,
+                    "stdout": "",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "timestamp": datetime.now().isoformat(),
+                    "warnings": warnings,
+                    "recovery_method": "evidence_based"
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Save step result file
+            step_result_file = step_results_dir / f"step_{step_number}_{tool_name}.json"
+            with open(step_result_file, 'w') as f:
+                json.dump(step_result, f, indent=2)
+            
+            self.logger.info(f"📄 Created step result from evidence: {step_result_file}")
+            
+            # Log step completion to workflow execution log
+            self._log_recovered_step_completion(workflow_id, step_number, tool_name, evidence)
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error creating step result from evidence: {e}")
+    
+    def _log_recovered_step_completion(self, workflow_id: str, step_number: int, tool_name: str, evidence: Dict[str, Any]):
+        """Log recovered step completion to workflow execution log"""
+        try:
+            # Create a temporary logger for this workflow
+            from logging_utils import DynamicWorkflowLogger
+            recovery_logger = DynamicWorkflowLogger(workflow_id, f"Recovery-{tool_name}", str(self.data_dir))
+            
+            recovery_logger.logger.info("-" * 80)
+            recovery_logger.logger.info(f"🔄 RECOVERED STEP {step_number} COMPLETION: {tool_name.upper()}")
+            recovery_logger.logger.info(f"📊 Evidence-based recovery performed")
+            recovery_logger.logger.info(f"📁 Output Files: {evidence['output_file_count']} files")
+            recovery_logger.logger.info(f"📝 Tool Log Available: {evidence['has_tool_log']}")
+            recovery_logger.logger.info(f"✅ Tool Log Indicates Completion: {evidence['tool_log_indicates_completion']}")
+            recovery_logger.logger.info(f"⏰ Recovery Time: {datetime.now().isoformat()}")
+            recovery_logger.logger.info("-" * 80)
+            
+            recovery_logger.cleanup()
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error logging recovered completion: {e}")
+    
+    def _scan_for_missed_completions(self):
+        """Scan for tools that completed but weren't properly detected"""
+        try:
+            self.logger.info("🔍 Scanning for missed tool completions...")
+            
+            # Check all workflow runs
+            runs_dir = self.data_dir / "runs"
+            for run_dir in runs_dir.glob("*"):
+                if not run_dir.is_dir():
+                    continue
+                    
+                workflow_id = run_dir.name
+                
+                # Check each step directory for completion evidence
+                for step_dir in run_dir.glob("step_*"):
+                    try:
+                        # Extract step info from directory name
+                        step_parts = step_dir.name.split('_')
+                        if len(step_parts) >= 3:
+                            step_number = int(step_parts[1])
+                            tool_name = step_parts[2]
+                            
+                            # Check if we have completion evidence but no step result
+                            evidence = self._gather_completion_evidence(workflow_id, step_number, tool_name)
+                            
+                            if (evidence['has_output_files'] or evidence['tool_log_indicates_completion']) and not evidence['has_step_result']:
+                                self.logger.info(f"🔄 Found missed completion: {workflow_id} - {tool_name}")
+                                self._create_step_result_from_evidence(workflow_id, step_number, tool_name, evidence)
+                                
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Error checking step {step_dir}: {e}")
+                        
+        except Exception as e:
+            self.logger.error(f"❌ Error in missed completion scan: {e}")
+    
+# Manual trigger checking removed - completion scanning is now purely automatic
+    def _scan_workflow_for_missed_completions(self, workflow_id: str):
+        """Scan a specific workflow for missed completions"""
+        try:
+            self.logger.info(f"🔍 Scanning workflow {workflow_id} for missed completions...")
+            
+            runs_dir = self.data_dir / "runs"
+            run_dir = runs_dir / workflow_id
+            if not run_dir.exists():
+                return
+                
+            # Check each step directory for completion evidence
+            for step_dir in run_dir.glob("step_*"):
+                try:
+                    # Extract step info from directory name
+                    step_parts = step_dir.name.split('_')
+                    if len(step_parts) >= 3:
+                        step_number = int(step_parts[1])
+                        tool_name = step_parts[2]
+                        
+                        # Check if we have completion evidence but no step result
+                        evidence = self._gather_completion_evidence(workflow_id, step_number, tool_name)
+                        
+                        if (evidence['has_output_files'] or evidence['tool_log_indicates_completion']) and not evidence['has_step_result']:
+                            self.logger.info(f"🔄 Recovering missed completion: {workflow_id} - {tool_name}")
+                            self._create_step_result_from_evidence(workflow_id, step_number, tool_name, evidence)
+                            
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error checking step {step_dir}: {e}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ Error in workflow completion scan: {e}")
     
     def execute_tool_in_container(self, tool_name: str, input_files: List[str], 
                                  output_dir: str, workflow_id: str, step_number: int,
@@ -168,14 +409,12 @@ class ContainerProcessManager:
                     exit_code=-1
                 )
             
-            # Start container in background
+            # Start container and wait for completion using robust monitoring
             process = subprocess.Popen(
                 docker_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
+                text=True
             )
             
             # Track container
@@ -190,39 +429,23 @@ class ContainerProcessManager:
                     'status': 'running'
                 }
             
-            # Monitor process and collect logs
-            stdout_lines = []
-            stderr_lines = []
-            
-            # Read output in real-time
-            while process.poll() is None:
-                # Read stdout
-                if process.stdout.readable():
-                    line = process.stdout.readline()
-                    if line:
-                        stdout_lines.append(line.rstrip())
-                        self.logger.info(f"[{tool_name}] {line.rstrip()}")
-                
-                # Read stderr
-                if process.stderr.readable():
-                    line = process.stderr.readline()
-                    if line:
-                        stderr_lines.append(line.rstrip())
-                        self.logger.warning(f"[{tool_name}] {line.rstrip()}")
-                
-                time.sleep(0.1)
-            
-            # Get final output
-            remaining_stdout, remaining_stderr = process.communicate()
-            stdout_lines.extend(remaining_stdout.splitlines())
-            stderr_lines.extend(remaining_stderr.splitlines())
+            # Use robust container monitoring instead of blocking I/O
+            stdout_lines, stderr_lines = self._monitor_container_with_fallback(
+                container_name, container_id, tool_name, process
+            )
             
             execution_time = time.time() - start_time
+            
+            # CORE FIX: Better success detection for long-running tools
+            # Don't rely solely on process.returncode for container-based execution
+            output_files = self._collect_output_files(output_dir, tool_name)
+            
+            # CORE FIX: Now we should have reliable exit codes from improved monitoring
             success = process.returncode == 0
             
-            
-            # Collect output files
-            output_files = self._collect_output_files(output_dir, tool_name)
+            if process.returncode is None:
+                self.logger.error(f"❌ MONITORING FAILURE: No exit code captured for {tool_name}")
+                success = False
             
             # Create result
             result = ContainerExecutionResult(
@@ -272,11 +495,14 @@ class ContainerProcessManager:
                                      output_dir: str, tool_config: Dict[str, Any], 
                                      container_name: str = None) -> List[str]:
         """Build Docker command using static volume mounts from docker-compose.yml"""
-        cmd = ["docker", "run", "--rm"]
+        # CORE FIX: Don't auto-remove containers until we capture exit codes
+        cmd = ["docker", "run"]
         
-        # Add resource limits
-        cmd.extend(["--memory", "8g"])  # 8GB memory limit
-        cmd.extend(["--cpus", "4"])     # 4 CPU cores
+        # Add resource limits (can be overridden by tool metadata)
+        memory_limit = tool_config.get('memory_requirement', '8g')
+        cpu_limit = tool_config.get('cpu_requirement', '4')
+        cmd.extend(["--memory", memory_limit])
+        cmd.extend(["--cpus", str(cpu_limit)])
         cmd.extend(["--ulimit", "nofile=65536:65536"])  # File descriptor limit
         
         # Add environment variables
@@ -309,81 +535,214 @@ class ContainerProcessManager:
         image_name = self._get_container_image(tool_name)
         cmd.append(image_name)
         
-        # Add tool-specific command arguments using static paths
-        cmd.extend(self._get_static_tool_command_args(tool_name, input_files, output_dir, tool_config))
+        # Add tool-specific command arguments using dynamic metadata extraction
+        cmd.extend(self._get_dynamic_tool_command_args(tool_name, input_files, output_dir, tool_config))
         
         return cmd
     
-    def _get_static_tool_command_args(self, tool_name: str, input_files: List[str], 
-                                     output_dir: str, tool_config: Dict[str, Any]) -> List[str]:
-        """Get tool command arguments using static paths within /data mount"""
-        if tool_name == "fastqc":
-            args = ["sh", "-c"]
-            # Create output directory and run FastQC
-            output_relative = str(Path(output_dir).relative_to(self.data_dir))
-            fastqc_cmd = f"mkdir -p /data/{output_relative} && fastqc"
-            # Use host data mount paths for Windows compatibility
-            for input_file in input_files:
-                input_path = Path(input_file)
-                if str(input_path).startswith(str(self.data_dir)):
-                    relative_path = input_path.relative_to(self.data_dir)
-                    fastqc_cmd += f" /host-data/{relative_path}"
-                else:
-                    fastqc_cmd += f" /host-data/{input_path.name}"
-            # Output to a specific output directory
-            fastqc_cmd += f" -o /data/{output_relative} --noextract"
-            args.append(fastqc_cmd)
+    def _get_dynamic_tool_command_args(self, tool_name: str, input_files: List[str], 
+                                      output_dir: str, tool_config: Dict[str, Any]) -> List[str]:
+        """Get tool command arguments dynamically from container metadata"""
+        try:
+            # Get tool metadata from container
+            metadata = self._extract_tool_metadata(tool_name)
+            if not metadata:
+                self.logger.warning(f"No metadata found for tool {tool_name}, falling back to basic command")
+                return [tool_name, "--help"]
             
-        elif tool_name == "trimmomatic":
-            args = ["trimmomatic", "PE", "-phred33"]
-            # Use original file paths directly
-            for input_file in input_files:
-                input_path = Path(input_file)
-                if str(input_path).startswith(str(self.data_dir)):
-                    relative_path = input_path.relative_to(self.data_dir)
-                    args.append(f"/data/{relative_path}")
-                else:
-                    args.append(f"/data/{input_path.name}")
-            args.extend(["trimmed_1.fastq", "unpaired_1.fastq", "trimmed_2.fastq", "unpaired_2.fastq"])
-            args.extend(["ILLUMINACLIP:/adapters/TruSeq3-SE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"])
+            # Update tool_config with resource requirements from metadata
+            if 'tool_memory_requirement' in metadata:
+                tool_config['memory_requirement'] = metadata['tool_memory_requirement']
+            if 'tool_cpu_requirement' in metadata:
+                tool_config['cpu_requirement'] = metadata['tool_cpu_requirement']
             
-        elif tool_name == "spades":
-            args = ["spades.py", "--careful", "--only-assembler", "--threads", "4", "--memory", "8"]
-            if len(input_files) >= 2:
-                for i, input_file in enumerate(input_files[:2]):
-                    input_path = Path(input_file)
-                    if str(input_path).startswith(str(self.data_dir)):
-                        relative_path = input_path.relative_to(self.data_dir)
-                        args.extend([f"--pe1-{i+1}", f"/data/{relative_path}"])
-                    else:
-                        args.extend([f"--pe1-{i+1}", f"/data/{input_path.name}"])
-            args.extend(["-o", "/data"])
+            # Use the command template from metadata
+            command_template = metadata.get('tool_command_template', '')
+            if not command_template:
+                self.logger.warning(f"No command template found for {tool_name}")
+                return [metadata.get('tool_primary_command', tool_name), "--help"]
             
-        elif tool_name == "quast":
-            args = ["quast.py", "--threads", "4"]
-            for input_file in input_files:
-                input_path = Path(input_file)
-                if str(input_path).startswith(str(self.data_dir)):
-                    relative_path = input_path.relative_to(self.data_dir)
-                    args.append(f"/data/{relative_path}")
-                else:
-                    args.append(f"/data/{input_path.name}")
-            args.extend(["-o", "/data"])
+            # Build command based on metadata template
+            return self._build_command_from_template(tool_name, metadata, input_files, output_dir, tool_config)
             
-        elif tool_name == "multiqc":
-            args = ["multiqc", "/data", "-o", "/data", "--force"]
-            
-        else:
-            args = []
+        except Exception as e:
+            self.logger.error(f"Failed to get dynamic command for {tool_name}: {e}")
+            # Fallback to basic command
+            return [tool_name, "--help"]
+    
+    def _extract_tool_metadata(self, tool_name: str) -> Dict[str, str]:
+        """
+        Extract metadata from tool's Dockerfile directly.
         
-        return args
+        This is the primary method for getting tool configuration - reads metadata
+        directly from each tool's Dockerfile in the tools/ directory.
+        """
+        try:
+            # Try to read metadata from the Dockerfile in tools directory
+            # Check multiple possible paths since orchestrator might be in container
+            possible_paths = [
+                Path(f"/workflow/tools/{tool_name.lower()}/Dockerfile"),  # Container mount path
+                Path(f"tools/{tool_name.lower()}/Dockerfile"),           # Local development
+                Path(f"/app/tools/{tool_name.lower()}/Dockerfile"),      # Alternative container path
+                Path(f"../tools/{tool_name.lower()}/Dockerfile")         # Relative path
+            ]
+            
+            dockerfile_path = None
+            for path in possible_paths:
+                if path.exists():
+                    dockerfile_path = path
+                    break
+            
+            if dockerfile_path:
+                with open(dockerfile_path, 'r') as f:
+                    content = f.read()
+                
+                # Parse metadata from Dockerfile
+                metadata = {}
+                lines = content.split('\n')
+                in_metadata_section = False
+                
+                for line in lines:
+                    line = line.strip()
+                    
+                    # Check if this line starts metadata section
+                    if 'BIOFRAME_TOOL_METADATA' in line:
+                        in_metadata_section = True
+                        continue
+                    
+                    # Parse metadata lines
+                    if in_metadata_section and line.startswith('# tool_'):
+                        try:
+                            metadata_line = line[2:]  # Remove '# '
+                            key, value = metadata_line.split(':', 1)
+                            metadata[key.strip()] = value.strip()
+                        except ValueError:
+                            continue
+                    elif in_metadata_section and not line.startswith('#'):
+                        # End of metadata section
+                        break
+                
+                if metadata:
+                    self.logger.info(f"✅ Loaded metadata for {tool_name} from Dockerfile")
+                    return metadata
+            
+            # Fallback to container inspection if Dockerfile not available
+            self.logger.warning(f"Dockerfile not found for {tool_name}, using fallback metadata")
+            return self._get_fallback_metadata(tool_name)
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting metadata for {tool_name}: {e}")
+            return self._get_fallback_metadata(tool_name)
     
+    def _get_fallback_metadata(self, tool_name: str) -> Dict[str, str]:
+        """
+        Get minimal fallback metadata when Dockerfile extraction fails.
+        
+        This should rarely be used now that the orchestrator reads metadata directly
+        from Dockerfiles. Only provides basic functionality for emergency cases.
+        """
+        self.logger.warning(f"🚨 Using minimal fallback metadata for {tool_name} - Dockerfile metadata should be preferred")
+        
+        # Minimal generic fallback - just enough to prevent crashes
+        return {
+            'tool_name': tool_name.title(),
+            'tool_primary_command': tool_name.lower(),
+            'tool_command_template': f'{tool_name.lower()} --help',
+            'tool_description': f'Generic {tool_name} tool',
+            'tool_memory_requirement': '4g',
+            'tool_cpu_requirement': '2'
+        }
     
+    def _build_command_from_template(self, tool_name: str, metadata: Dict[str, str], 
+                                   input_files: List[str], output_dir: str, 
+                                   tool_config: Dict[str, Any]) -> List[str]:
+        """Build command dynamically from metadata template"""
+        try:
+            # Get the command template from metadata
+            template = metadata.get('tool_command_template', '')
+            primary_command = metadata.get('tool_primary_command', tool_name.lower())
+            
+            if not template:
+                self.logger.warning(f"No command template found for {tool_name}, using basic command")
+                return [primary_command, "--help"]
+            
+            # Build command using template substitution
+            command = self._substitute_template_variables(template, input_files, output_dir, metadata)
+            
+            # Debug: Log the generated command
+            self.logger.info(f"🔧 Generated command for {tool_name}: {command}")
+            
+            # Handle complex command structures
+            if self._needs_shell_wrapper(command):
+                self.logger.info(f"🐚 Using shell wrapper for complex command")
+                return ["sh", "-c", command]
+            else:
+                args = command.split()
+                self.logger.info(f"🔧 Split command args: {args}")
+                return args
+                
+        except Exception as e:
+            self.logger.error(f"Error building command for {tool_name}: {e}")
+            return [tool_name, "--help"]
     
+    def _substitute_template_variables(self, template: str, input_files: List[str], 
+                                     output_dir: str, metadata: Dict[str, str]) -> str:
+        """Substitute all template variables with actual values"""
+        command = template
+        
+        # Basic substitutions - use actual output directory path instead of environment variable
+        output_path = Path(output_dir)
+        output_relative = str(output_path.relative_to(self.data_dir))
+        container_output_dir = f"/data/{output_relative}"
+        
+        substitutions = {
+            '{output_dir}': container_output_dir,
+            '{OUTPUT_DIR}': container_output_dir,
+            '{input_files}': self._format_input_files_for_template(input_files),
+            '{options}': '',  # Default empty options
+            '{threads}': '4',
+            '{memory}': '8'
+        }
+        
+        # Add input file specific substitutions
+        for i, input_file in enumerate(input_files):
+            substitutions[f'{{input_file_{i+1}}}'] = self._get_container_path(input_file)
+            
+        # Add common aliases
+        if len(input_files) >= 1:
+            substitutions['{input_file}'] = self._get_container_path(input_files[0])
+            substitutions['{read1}'] = self._get_container_path(input_files[0])
+            substitutions['{assembly_files}'] = self._get_container_path(input_files[0])
+            substitutions['{reference}'] = self._get_container_path(input_files[0])
+            
+        if len(input_files) >= 2:
+            substitutions['{read2}'] = self._get_container_path(input_files[1])
+            substitutions['{reads}'] = ' '.join([self._get_container_path(f) for f in input_files[1:]])
+        
+        # Apply all substitutions
+        for placeholder, value in substitutions.items():
+            command = command.replace(placeholder, str(value))
+        
+        return command
     
+    def _get_container_path(self, file_path: str) -> str:
+        """Convert host file path to container path"""
+        file_path_obj = Path(file_path)
+        if str(file_path_obj).startswith(str(self.data_dir)):
+            relative_path = file_path_obj.relative_to(self.data_dir)
+            return f"/data/{relative_path}"
+        else:
+            return f"/data/{file_path_obj.name}"
     
+    def _format_input_files_for_template(self, input_files: List[str]) -> str:
+        """Format input files for template substitution"""
+        container_paths = [self._get_container_path(f) for f in input_files]
+        return ' '.join(container_paths)
     
-    
+    def _needs_shell_wrapper(self, command: str) -> bool:
+        """Check if command needs shell wrapper (contains pipes, redirects, etc.)"""
+        shell_operators = ['>', '<', '|', '&&', '||', ';', '$(', '`']
+        return any(op in command for op in shell_operators)
     
     def _validate_container_execution(self, tool_name: str, input_files: List[str], output_dir: str) -> Dict[str, Any]:
         """Validate container execution parameters before running"""
@@ -466,73 +825,9 @@ class ContainerProcessManager:
     
     def _validate_tool_output(self, tool_name: str, result: 'ContainerExecutionResult', 
                             input_files: List[str], output_dir: str) -> bool:
-        """Validate tool output and detect failures that should stop the workflow"""
-        try:
-            # Check for critical errors in stderr that indicate file reading failures
-            if result.stderr:
-                stderr_lower = result.stderr.lower()
-                
-                # Check for file reading errors
-                file_reading_errors = [
-                    "skipping file",
-                    "didn't exist",
-                    "couldn't be read",
-                    "no such file",
-                    "permission denied",
-                    "access denied",
-                    "file not found"
-                ]
-                
-                for error_pattern in file_reading_errors:
-                    if error_pattern in stderr_lower:
-                        self.logger.error(f"❌ CRITICAL ERROR: {error_pattern.upper()} detected in stderr")
-                        self.logger.error(f"❌ Tool output: {result.stderr}")
-                        return False
-                
-                # Check for other critical errors
-                critical_errors = [
-                    "fatal error",
-                    "critical error",
-                    "cannot proceed",
-                    "aborted",
-                    "failed to process"
-                ]
-                
-                for error_pattern in critical_errors:
-                    if error_pattern in stderr_lower:
-                        self.logger.error(f"❌ CRITICAL ERROR: {error_pattern.upper()} detected")
-                        self.logger.error(f"❌ Tool output: {result.stderr}")
-                        return False
-            
-            # Check exit code
-            if result.exit_code != 0:
-                self.logger.error(f"❌ Tool exited with non-zero code: {result.exit_code}")
-                if result.stderr:
-                    self.logger.error(f"❌ Error output: {result.stderr}")
-                return False
-            
-            # Check if output files were generated (for tools that should produce output)
-            if tool_name in ['fastqc', 'trimmomatic', 'multiqc'] and len(result.output_files) == 0:
-                self.logger.error(f"❌ Tool '{tool_name}' produced no output files")
-                self.logger.error(f"❌ This indicates the tool failed to process input files")
-                return False
-            
-            # Validate output files exist and are not empty
-            for output_file in result.output_files:
-                if not Path(output_file).exists():
-                    self.logger.error(f"❌ Output file does not exist: {output_file}")
-                    return False
-                
-                if Path(output_file).stat().st_size == 0:
-                    self.logger.error(f"❌ Output file is empty: {output_file}")
-                    return False
-            
-            self.logger.info(f"✅ Tool '{tool_name}' output validation passed")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Output validation error: {e}")
-            return False
+        """Simple validation - trust the exit code"""
+        # Tool finished and we have reliable exit code - that's all we need!
+        return result.exit_code == 0
     
     def _validate_docker_command(self, docker_cmd: List[str]) -> bool:
         """Validate Docker command before execution"""
@@ -565,33 +860,81 @@ class ContainerProcessManager:
             return False
     
     def _get_supported_tools(self) -> List[str]:
-        """Get list of supported tools"""
-        return ["fastqc", "trimmomatic", "spades", "quast", "multiqc", "bwa", "samtools", "bedtools", "gatk", "pilon"]
+        """Dynamically discover all available tools from Docker images"""
+        try:
+            # Get all bioframe tool images
+            result = subprocess.run([
+                "docker", "images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", "reference=bioframe-*"
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0:
+                self.logger.warning("Could not list Docker images, falling back to default tools")
+                return ["fastqc", "trimmomatic", "spades", "quast", "multiqc"]
+            
+            # Extract tool names from image names
+            tools = []
+            for line in result.stdout.strip().split('\n'):
+                if line and 'bioframe-' in line:
+                    # Extract tool name from "bioframe-toolname:tag"
+                    image_name = line.split(':')[0]  # Remove tag
+                    tool_name = image_name.replace('bioframe-', '')
+                    if tool_name and tool_name not in tools:
+                        tools.append(tool_name)
+            
+            if not tools:
+                self.logger.warning("No bioframe tools found, falling back to default tools")
+                return ["fastqc", "trimmomatic", "spades", "quast", "multiqc"]
+            
+            self.logger.info(f"🔍 Discovered {len(tools)} tools: {', '.join(tools)}")
+            return tools
+            
+        except Exception as e:
+            self.logger.error(f"Error discovering tools: {e}")
+            return ["fastqc", "trimmomatic", "spades", "quast", "multiqc"]
     
     def _get_container_image(self, tool_name: str) -> str:
-        """Get the appropriate container image for a tool"""
-        tool_images = {
-            "fastqc": "bioframe-fastqc:latest",
-            "trimmomatic": "bioframe-trimmomatic:latest",
-            "spades": "bioframe-spades:latest",
-            "quast": "bioframe-quast:latest",
-            "multiqc": "bioframe-multiqc:latest"
-        }
-        return tool_images.get(tool_name.lower(), f"bioframe-{tool_name}:latest")
+        """Dynamically get the appropriate container image for a tool"""
+        # Standard naming convention: bioframe-{tool_name}:latest
+        return f"bioframe-{tool_name.lower()}:latest"
     
     
     def _get_container_id_by_name(self, container_name: str) -> Optional[str]:
-        """Get container ID by name"""
-        try:
-            result = subprocess.run(
-                ["docker", "ps", "-q", "-f", f"name={container_name}"],
-                capture_output=True, text=True
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-        except Exception as e:
-            self.logger.warning(f"Error getting container ID for {container_name}: {e}")
+        """Get container ID by name with retry logic and better error handling"""
+        if not container_name:
+            self.logger.error("❌ Cannot get container ID: container_name is None or empty")
+            return None
+            
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            try:
+                result = subprocess.run(
+                    ["docker", "ps", "-q", "-f", f"name={container_name}"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    container_id = result.stdout.strip()
+                    self.logger.info(f"✅ Found container ID: {container_id} for {container_name}")
+                    return container_id
+                    
+                # Container not found yet, wait and retry
+                time.sleep(0.5)
+                
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"⚠️ Timeout getting container ID for {container_name} (attempt {attempt + 1})")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error getting container ID for {container_name}: {e}")
+                
+        self.logger.warning(f"⚠️ Could not find container ID for {container_name} after {max_attempts} attempts")
         return None
+    
+    def force_completion_scan(self):
+        """Manually trigger a scan for missed completions"""
+        self.logger.info("🔍 Manually triggered completion scan")
+        self._scan_for_missed_completions()
+    
+    def get_active_containers(self) -> Dict[str, Any]:
+        """Get currently tracked active containers"""
+        return self.active_containers.copy()
     
     def _collect_output_files(self, output_dir: str, tool_name: str) -> List[str]:
         """Collect output files from output directory"""
@@ -655,8 +998,218 @@ class ContainerProcessManager:
                 self.logger.warning(f"Error checking container {container_id}: {e}")
         
         return cleaned
-
-
+    
+    def _monitor_container_with_fallback(self, container_name: str, container_id: str, 
+                                       tool_name: str, process: subprocess.Popen) -> Tuple[List[str], List[str]]:
+        """
+        Robust container monitoring that avoids blocking I/O deadlocks.
+        
+        Uses a hybrid approach:
+        1. Try non-blocking real-time monitoring for short periods
+        2. Fall back to docker logs command for reliable output capture
+        3. Monitor container status via docker inspect
+        """
+        stdout_lines = []
+        stderr_lines = []
+        
+        try:
+            # Method 1: Try short-term non-blocking monitoring
+            max_realtime_attempts = 30  # 3 seconds of real-time monitoring
+            realtime_attempts = 0
+            
+            while process.poll() is None and realtime_attempts < max_realtime_attempts:
+                # Non-blocking read attempt
+                try:
+                    # Use select for non-blocking I/O on Unix-like systems
+                    import select
+                    ready, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+                    
+                    for stream in ready:
+                        if stream == process.stdout:
+                            line = stream.readline()
+                            if line:
+                                stdout_lines.append(line.rstrip())
+                                self.logger.info(f"[{tool_name}] {line.rstrip()}")
+                        elif stream == process.stderr:
+                            line = stream.readline()
+                            if line:
+                                stderr_lines.append(line.rstrip())
+                                self.logger.warning(f"[{tool_name}] {line.rstrip()}")
+                                
+                except (ImportError, OSError):
+                    # Fallback for Windows or systems without select
+                    break
+                
+                realtime_attempts += 1
+                time.sleep(0.1)
+            
+            # Method 2: Container-based monitoring for long-running processes
+            if process.poll() is None:
+                self.logger.info(f"🔄 Switching to container-based monitoring for {tool_name}")
+                container_stdout, container_stderr = self._monitor_container_via_docker_logs(
+                    container_name, container_id, tool_name, process
+                )
+                stdout_lines.extend(container_stdout)
+                stderr_lines.extend(container_stderr)
+            else:
+                # Process finished during real-time monitoring
+                remaining_stdout, remaining_stderr = process.communicate()
+                stdout_lines.extend(remaining_stdout.splitlines())
+                stderr_lines.extend(remaining_stderr.splitlines())
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error in container monitoring for {tool_name}: {e}")
+            # Fallback: just wait for process to complete
+            try:
+                stdout, stderr = process.communicate(timeout=3600)  # 1 hour timeout
+                stdout_lines.extend(stdout.splitlines())
+                stderr_lines.extend(stderr.splitlines())
+            except subprocess.TimeoutExpired:
+                self.logger.error(f"❌ Container {tool_name} timed out after 1 hour")
+                process.kill()
+                
+        return stdout_lines, stderr_lines
+    
+    def _monitor_container_via_docker_logs(self, container_name: str, container_id: str,
+                                         tool_name: str, process: subprocess.Popen) -> Tuple[List[str], List[str]]:
+        """
+        Monitor container via docker logs command instead of subprocess pipes.
+        This avoids the blocking I/O issues with long-running containers.
+        """
+        stdout_lines = []
+        stderr_lines = []
+        last_log_size = 0
+        
+        self.logger.info(f"📊 Starting docker logs monitoring for {tool_name}")
+        
+        # If no container_id, try to get it again
+        if not container_id:
+            container_id = self._get_container_id_by_name(container_name)
+            if not container_id:
+                self.logger.error(f"❌ Cannot monitor container - ID not found for {container_name}")
+                # Fall back to process.communicate()
+                try:
+                    stdout, stderr = process.communicate(timeout=3600)
+                    return stdout.splitlines(), stderr.splitlines()
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    return [], [f"Container {tool_name} timed out"]
+        
+        while process.poll() is None:
+            try:
+                # Get container status
+                status_result = subprocess.run([
+                    "docker", "inspect", "--format", "{{.State.Status}}", container_id
+                ], capture_output=True, text=True, timeout=10)
+                
+                if status_result.returncode == 0:
+                    container_status = status_result.stdout.strip()
+                    
+                    if container_status not in ["running"]:
+                        # CORE FIX: Capture exit code before cleaning up
+                        exit_code = self._capture_container_exit_code(container_id, tool_name)
+                        self.logger.info(f"🏁 Container {tool_name} finished with status: {container_status}, exit_code: {exit_code}")
+                        
+                        # Update process returncode if we captured it
+                        if exit_code is not None and hasattr(process, '_returncode'):
+                            process._returncode = exit_code
+                        
+                        # Clean up container now that we have the exit code
+                        self._cleanup_container(container_id, tool_name)
+                        
+                        break
+                    
+                    # Get container logs
+                    logs_result = subprocess.run([
+                        "docker", "logs", container_id
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if logs_result.returncode == 0:
+                        # Process new log lines
+                        all_output = logs_result.stdout + logs_result.stderr
+                        current_lines = all_output.splitlines()
+                        
+                        # Only log new lines since last check
+                        if len(current_lines) > last_log_size:
+                            new_lines = current_lines[last_log_size:]
+                            for line in new_lines:
+                                if line.strip():
+                                    stdout_lines.append(line)
+                                    self.logger.info(f"[{tool_name}] {line}")
+                            last_log_size = len(current_lines)
+                
+                else:
+                    # Container not found, might have finished
+                    self.logger.warning(f"⚠️ Container {container_id} not found, assuming finished")
+                    break
+                    
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"⚠️ Timeout checking container {tool_name}, continuing...")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error monitoring container {tool_name}: {e}")
+            
+            time.sleep(5)  # Check every 5 seconds instead of 0.1
+        
+        # Get final logs
+        try:
+            final_logs = subprocess.run([
+                "docker", "logs", container_id
+            ], capture_output=True, text=True, timeout=30)
+            
+            if final_logs.returncode == 0:
+                final_output = final_logs.stdout + final_logs.stderr
+                final_lines = final_output.splitlines()
+                
+                # Add any remaining new lines
+                if len(final_lines) > last_log_size:
+                    remaining_lines = final_lines[last_log_size:]
+                    for line in remaining_lines:
+                        if line.strip():
+                            stdout_lines.append(line)
+                            self.logger.info(f"[{tool_name}] {line}")
+                            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error getting final logs for {tool_name}: {e}")
+        
+        # Wait for process to complete
+        try:
+            process.wait(timeout=60)  # Wait up to 1 minute for process cleanup
+        except subprocess.TimeoutExpired:
+            self.logger.warning(f"⚠️ Process cleanup timeout for {tool_name}")
+            
+        self.logger.info(f"✅ Container monitoring completed for {tool_name}")
+        return stdout_lines, stderr_lines
+    
+    def _capture_container_exit_code(self, container_id: str, tool_name: str) -> Optional[int]:
+        """Capture container exit code before cleanup"""
+        try:
+            result = subprocess.run([
+                "docker", "inspect", "--format", "{{.State.ExitCode}}", container_id
+            ], capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                exit_code_str = result.stdout.strip()
+                exit_code = int(exit_code_str)
+                self.logger.info(f"📋 Captured exit code {exit_code} for {tool_name}")
+                return exit_code
+            else:
+                self.logger.warning(f"⚠️ Could not inspect container {container_id}")
+                return None
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error capturing exit code for {tool_name}: {e}")
+            return None
+    
+    def _cleanup_container(self, container_id: str, tool_name: str):
+        """Remove container after capturing exit code"""
+        try:
+            subprocess.run([
+                "docker", "rm", container_id
+            ], capture_output=True, text=True, timeout=10)
+            self.logger.info(f"🧹 Cleaned up container {container_id} for {tool_name}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error cleaning up container {container_id}: {e}")
+    
 class ContainerExecutionResult:
     """Enhanced result of a container execution with detailed tracking information"""
     

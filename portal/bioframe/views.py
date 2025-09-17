@@ -593,11 +593,14 @@ def create_workflow(request):
                     difficulty = 'Intermediate'
                 
                 # Create workflow definition with auto-filled metadata
+                # Normalize tool names to lowercase for orchestrator compatibility
+                normalized_tools = [tool.lower() for tool in selected_tools]
+                
                 workflow_data = {
                     'id': f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                     'name': workflow_name,
                     'description': workflow_description,
-                    'tools': selected_tools,
+                    'tools': normalized_tools,
                     'created_at': datetime.now().isoformat(),
                     'created_by': request.user.username if request.user.is_authenticated else 'anonymous',
                     'type': 'custom_workflow',
@@ -810,72 +813,38 @@ def workflow_detail(request, workflow_id):
 def workflow_status_api(request, workflow_id):
     """API endpoint to get real-time workflow status and logs"""
     try:
-        import sys
-        sys.path.append('/app/workflow-orchestrator')
-        from orchestrator import WorkflowOrchestrator
-        orchestrator = WorkflowOrchestrator(data_dir="/app/data", init_docker=False)
+        # Simple status check without orchestrator dependency
+        from pathlib import Path
+        import yaml
+        import json
         
-        workflow_status = orchestrator.get_workflow_status(workflow_id)
-        if not workflow_status or 'error' in workflow_status:
+        # Get workflow info from YAML file
+        workflow_file = Path(f'data/runs/{workflow_id}/workflow.yaml')
+        if not workflow_file.exists():
             return JsonResponse({'error': 'Workflow not found'}, status=404)
         
-        # Get tool status and error details
-        tools_status = []
-        for tool in workflow_status.get('tools', []):
-            tool_status = {
-                'tool_name': tool.get('tool_name', 'unknown'),
-                'status': tool.get('status', 'unknown'),
-                'error_message': tool.get('error_message'),
-                'execution_time': tool.get('execution_time'),
-                'started_at': tool.get('started_at'),
-                'completed_at': tool.get('completed_at'),
-                'logs': tool.get('logs', [])
-            }
-            tools_status.append(tool_status)
+        with open(workflow_file, 'r') as f:
+            workflow_data = yaml.safe_load(f)
         
-        # Get execution logs from log files
-        execution_logs = []
-        try:
-            run_dir = Path(f"/app/data/runs/{workflow_id}")
-            log_dir = run_dir / "logs"
-            if log_dir.exists():
-                # Only show the main workflow execution log file
-                log_file = log_dir / "workflow_execution.log"
-                if log_file.exists():
-                    try:
-                        with open(log_file, 'r') as f:
-                            log_content = f.read()
-                            execution_logs.append({
-                                'file': log_file.name,
-                                'content': log_content,
-                                'timestamp': datetime.fromtimestamp(log_file.stat().st_mtime)
-                            })
-                    except Exception as e:
-                        execution_logs.append({
-                            'file': log_file.name,
-                            'content': f"Error reading log: {e}",
-                            'timestamp': datetime.now()
-                        })
-        except Exception as e:
-                    execution_logs.append({
-            'file': 'error',
-            'content': f"Error accessing logs: {e}",
-            'timestamp': datetime.now()
-        })
-        
-        response_data = {
-            'id': workflow_id,
-            'status': workflow_status.get('status', 'unknown'),
-            'progress': workflow_status.get('progress', 0),
-            'updated_at': workflow_status.get('last_updated'),
-            'tools': tools_status,
-            'execution_logs': execution_logs
+        # Basic status response
+        status_data = {
+            'workflow_id': workflow_id,
+            'status': workflow_data.get('status', 'unknown'),
+            'tools': workflow_data.get('tools', []),
+            'created_at': workflow_data.get('created_at'),
+            'started_at': workflow_data.get('started_at'),
+            'updated_at': workflow_data.get('updated_at', workflow_data.get('created_at'))
         }
         
-        return JsonResponse(response_data)
+        return JsonResponse(status_data)
         
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        # Return basic error response if YAML parsing fails
+        return JsonResponse({
+            'error': f'Unable to load workflow status: {str(e)}',
+            'workflow_id': workflow_id,
+            'status': 'unknown'
+        }, status=500)
 
 def render_file_based_workflow_detail(request, workflow_status, workflow_id):
     """Render workflow detail for file-based workflows"""
@@ -984,6 +953,25 @@ def render_file_based_workflow_detail(request, workflow_status, workflow_id):
             'timestamp': datetime.now()
         })
     
+    # Get input files from the inputs directory
+    input_files = []
+    input_dir = run_dir / "inputs"
+    if input_dir.exists():
+        for file_path in input_dir.glob("*"):
+            if file_path.is_file():
+                file_info = {
+                    'name': file_path.name,
+                    'path': str(file_path),
+                    'size': file_path.stat().st_size,
+                    'type': file_path.suffix.lower(),
+                    'relative_path': str(file_path.relative_to(run_dir)),
+                    'modified_at': datetime.fromtimestamp(file_path.stat().st_mtime)
+                }
+                input_files.append(file_info)
+    
+    # Sort input files by name for consistent display
+    input_files.sort(key=lambda x: x['name'])
+    
     # Get output files from each step
     output_files_by_step = {}
     
@@ -998,9 +986,12 @@ def render_file_based_workflow_detail(request, workflow_status, workflow_id):
                         'path': str(file_path),
                         'size': file_path.stat().st_size,
                         'type': file_path.suffix.lower(),
-                        'relative_path': str(file_path.relative_to(run_dir))
+                        'relative_path': str(file_path.relative_to(run_dir)),
+                        'modified_at': datetime.fromtimestamp(file_path.stat().st_mtime)
                     }
                     step_files.append(file_info)
+            # Sort step files by name for consistent display
+            step_files.sort(key=lambda x: x['name'])
             output_files_by_step[tool['tool_name']] = step_files
     
     # Calculate accurate workflow status and progress
@@ -1072,6 +1063,7 @@ def render_file_based_workflow_detail(request, workflow_status, workflow_id):
             'run_directory': f"/app/data/runs/{workflow_id}"
         },
         'execution_logs': execution_logs,
+        'input_files': input_files,
         'output_files_by_step': output_files_by_step
     }
     return render(request, 'bioframe/workflow_detail.html', context)
@@ -1641,10 +1633,13 @@ def validate_and_start_workflow(request, run_id):
                 print(f"⚠️ Error loading template info: {e}")
         
         # Create workflow configuration with template tools
+        # Normalize tool names to lowercase for orchestrator compatibility
+        normalized_tools = [tool.lower() for tool in template_tools]
+        
         workflow_config = {
             'workflow_name': template_name,
             'description': f'Workflow run {run_id}',
-            'tools': template_tools,
+            'tools': normalized_tools,
             'created_at': datetime.now().isoformat()
         }
         
@@ -1785,32 +1780,115 @@ def extract_tool_name_from_container(container_name):
         return 'unknown'
 
 
-def view_workflow_file(request, workflow_id):
-    """View the content of a workflow file"""
+
+
+
+@login_required
+def open_workflow_file(request, workflow_id):
+    """
+    Simple file opener for workflow files using web download - no batch scripts needed!
+    Returns a download URL that opens the file directly in the browser
+    """
     try:
+        # Get file path from request
         file_path = request.GET.get('file')
         if not file_path:
-            return JsonResponse({'error': 'No file specified'}, status=400)
-        
-        # Construct full path to the file
-        full_path = Path(f"/app/data/runs/{workflow_id}/{file_path}")
+            return JsonResponse({
+                'success': False,
+                'error': 'No file specified'
+            }, status=400)
         
         # Security check: ensure the file is within the workflow directory
-        workflow_dir = Path(f"/app/data/runs/{workflow_id}")
-        if not full_path.resolve().is_relative_to(workflow_dir.resolve()):
+        run_dir = Path(f"/app/data/runs/{workflow_id}")
+        container_file_path = run_dir / file_path
+        
+        # Security validation
+        try:
+            if not container_file_path.resolve().is_relative_to(run_dir.resolve()):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Access denied: File outside workflow directory'
+                }, status=403)
+        except:
+            # Fallback for older Python versions
+            if not str(container_file_path.resolve()).startswith(str(run_dir.resolve())):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Access denied: File outside workflow directory'
+                }, status=403)
+        
+        # Check if file exists
+        if not container_file_path.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'File not found: {container_file_path}'
+            }, status=404)
+        
+        # Create a download URL for the file
+        # Extract the relative path from /app/data/
+        if str(container_file_path).startswith('/app/data/'):
+            relative_path = str(container_file_path)[9:]  # Remove '/app/data/'
+        else:
+            relative_path = str(container_file_path)
+        
+        # Create download URL
+        download_url = f"/download-file/?path={relative_path}"
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'File ready for download: {container_file_path.name}',
+            'file_path': str(container_file_path),
+            'download_url': download_url,
+            'method': 'web_download',
+            'instructions': 'Click the download URL to open the file in your browser'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Error opening file: {str(e)}'
+        }, status=500)
+
+
+def serve_file_download(request):
+    """Serve any file from the data directory for download/viewing"""
+    try:
+        file_path = request.GET.get('path')
+        if not file_path:
+            return JsonResponse({'error': 'No file path specified'}, status=400)
+        
+        # Security check: ensure the file is within the data directory
+        full_path = Path(f"/app/data/{file_path}")
+        
+        # Prevent directory traversal attacks
+        if not str(full_path.resolve()).startswith('/app/data/'):
             return JsonResponse({'error': 'Access denied'}, status=403)
         
+        # Check if file exists
         if not full_path.exists():
             return JsonResponse({'error': 'File not found'}, status=404)
         
-        # Read file content
-        with open(full_path, 'r') as f:
-            content = f.read()
+        # Determine content type
+        content_type = 'application/octet-stream'  # Default
+        if full_path.suffix.lower() == '.html':
+            content_type = 'text/html'
+        elif full_path.suffix.lower() == '.txt':
+            content_type = 'text/plain'
+        elif full_path.suffix.lower() == '.log':
+            content_type = 'text/plain'
+        elif full_path.suffix.lower() == '.json':
+            content_type = 'application/json'
+        elif full_path.suffix.lower() == '.xml':
+            content_type = 'application/xml'
         
-        return HttpResponse(content, content_type='text/plain')
-        
+        # Serve the file
+        with open(full_path, 'rb') as f:
+            response = HttpResponse(f.read(), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{full_path.name}"'
+            return response
+            
     except Exception as e:
-        return JsonResponse({'error': f'Error reading file: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Error serving file: {str(e)}'}, status=500)
 
 
 def get_workflow_execution_log(request, workflow_id):
@@ -2012,8 +2090,11 @@ def rerun_workflow_from_step(request, workflow_id, step_number):
         return redirect('workflow_detail', workflow_id=workflow_id)
 
 
+# Removed redundant basic get_tool_logs function - consolidated into get_enhanced_tool_logs
+
+
 def get_tool_logs(request, workflow_id, tool_name):
-    """Get enhanced orchestrator logs for a specific tool in a workflow"""
+    """Get comprehensive orchestrator logs and analysis for a specific tool"""
     try:
         from django.http import JsonResponse
         import json
@@ -2024,136 +2105,8 @@ def get_tool_logs(request, workflow_id, tool_name):
         if not run_dir.exists():
             return JsonResponse({'success': False, 'error': 'Workflow run not found'})
         
-        # Look for enhanced orchestrator logs
-        tool_logs = []
-        
-        # Check for workflow execution log (main orchestrator log)
-        execution_log = run_dir / "logs" / "workflow_execution.log"
-        if execution_log.exists():
-            with open(execution_log, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                current_step = None
-                in_tool_section = False
-                
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    # Check if this line starts a new step for our tool
-                    if f"STEP" in line and tool_name.upper() in line.upper():
-                        current_step = tool_name
-                        in_tool_section = True
-                        # Extract step information
-                        if "|" in line:
-                            parts = line.split("|")
-                            if len(parts) >= 4:
-                                timestamp_str = parts[0].strip()
-                                message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
-                                tool_logs.append({
-                                    'timestamp': timestamp_str,
-                                    'message': message,
-                                    'level': 'info',
-                                    'type': 'step_start'
-                                })
-                    # Check if this line is related to our tool and we're in the tool section
-                    elif in_tool_section and tool_name.lower() in line.lower():
-                        # Extract timestamp and message
-                        if "|" in line:
-                            parts = line.split("|")
-                            if len(parts) >= 4:
-                                timestamp_str = parts[0].strip()
-                                level = parts[1].strip().lower()
-                                message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
-                                
-                                # Only add meaningful messages
-                                if message and len(message) > 5:
-                                    tool_logs.append({
-                                        'timestamp': timestamp_str,
-                                        'message': message,
-                                        'level': level,
-                                        'type': 'orchestrator'
-                                    })
-                    # Check if we've moved to a different tool
-                    elif "STEP" in line and tool_name.upper() not in line.upper():
-                        in_tool_section = False
-                    # Check for step completion
-                    elif in_tool_section and ("COMPLETED" in line or "FAILED" in line) and tool_name.upper() in line.upper():
-                        if "|" in line:
-                            parts = line.split("|")
-                            if len(parts) >= 4:
-                                timestamp_str = parts[0].strip()
-                                level = parts[1].strip().lower()
-                                message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
-                                tool_logs.append({
-                                    'timestamp': timestamp_str,
-                                    'message': message,
-                                    'level': level,
-                                    'type': 'step_completion'
-                                })
-                        in_tool_section = False
-        
-        # Check for step results (if available) - temporarily disabled
-        # step_results_dir = run_dir / "step_results"
-        # if step_results_dir.exists():
-            # # Look for step result files for this tool
-            # for step_file in step_results_dir.glob(f"*{tool_name.lower()}*.json"):
-            #     try:
-            #         with open(step_file, 'r') as f:
-            #             step_data = json.load(f)
-            #             if step_data.get('success'):
-            #                 tool_logs.append({
-            #                     'timestamp': datetime.now().isoformat(),
-            #                     'message': f"✅ Step completed successfully - {len(step_data.get('output_files', []))} output files generated",
-            #                     'level': 'info',
-            #                     'type': 'step_result'
-            #                 })
-            #             else:
-            #                 tool_logs.append({
-            #                     'timestamp': datetime.now().isoformat(),
-            #                     'message': f"❌ Step failed - {step_data.get('error_message', 'Unknown error')}",
-            #                     'level': 'error',
-            #                     'type': 'step_result'
-            #                 })
-            #     except Exception as e:
-            #         tool_logs.append({
-            #             'timestamp': datetime.now().isoformat(),
-            #             'message': f"⚠️ Could not read step result: {str(e)}",
-            #             'level': 'warning',
-            #             'type': 'step_result'
-            #         })
-        
-        # Sort logs by timestamp
-        tool_logs.sort(key=lambda x: x['timestamp'])
-        
-        return JsonResponse({
-            'success': True,
-            'logs': tool_logs,
-            'tool_name': tool_name,
-            'total_logs': len(tool_logs)
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': f'Error retrieving tool logs: {str(e)}'
-        })
-
-
-def get_enhanced_tool_logs(request, workflow_id, tool_name):
-    """Get enhanced orchestrator logs with detailed analysis for a specific tool"""
-    try:
-        from django.http import JsonResponse
-        import json
-        from datetime import datetime
-        
-        # Construct path to workflow run directory
-        run_dir = Path(f"/app/data/runs/{workflow_id}")
-        if not run_dir.exists():
-            return JsonResponse({'success': False, 'error': 'Workflow run not found'})
-        
-        # Enhanced log analysis
-        enhanced_logs = {
+        # Comprehensive log analysis - provides all formats
+        tool_logs_data = {
             'tool_name': tool_name,
             'workflow_id': workflow_id,
             'orchestrator_logs': [],
@@ -2162,11 +2115,12 @@ def get_enhanced_tool_logs(request, workflow_id, tool_name):
             'execution_summary': {},
             'errors': [],
             'warnings': [],
-            'running_containers': []
+            'running_containers': [],
+            'basic_logs': []  # For backward compatibility
         }
         
         
-        # Check for running containers
+        # Check for running containers and get their logs
         try:
             import subprocess
             result = subprocess.run(
@@ -2179,19 +2133,52 @@ def get_enhanced_tool_logs(request, workflow_id, tool_name):
                     if line:
                         try:
                             container_info = json.loads(line)
-                            if tool_name in container_info.get('Names', '').lower():
-                                enhanced_logs['running_containers'].append({
+                            container_names = container_info.get('Names', '').lower()
+                            # More specific matching to avoid cross-tool contamination
+                            if (tool_name.lower() in container_names and 
+                                (f"-{tool_name.lower()}-" in container_names or 
+                                 container_names.endswith(f"-{tool_name.lower()}") or
+                                 f"{tool_name.lower()}_" in container_names)):
+                                
+                                container_data = {
                                     'id': container_info['ID'],
                                     'name': container_info['Names'],
                                     'status': container_info['Status'],
                                     'image': container_info['Image'],
                                     'created': container_info['CreatedAt'],
-                                    'tool_name': tool_name
-                                })
+                                    'tool_name': tool_name,
+                                    'tool_specific': True
+                                }
+                                tool_logs_data['running_containers'].append(container_data)
+                                
+                                # Get container logs and add them to orchestrator logs
+                                try:
+                                    container_logs_result = subprocess.run(
+                                        ['docker', 'logs', '--tail', '50', container_info['ID']],
+                                        capture_output=True, text=True, timeout=10
+                                    )
+                                    
+                                    if container_logs_result.returncode == 0:
+                                        container_output = container_logs_result.stdout or container_logs_result.stderr
+                                        if container_output:
+                                            # Parse container logs and add to orchestrator logs
+                                            for log_line in container_output.strip().split('\n'):
+                                                if log_line.strip():
+                                                    tool_logs_data['orchestrator_logs'].append({
+                                                        'timestamp': datetime.now().isoformat(),
+                                                        'message': log_line.strip(),
+                                                        'level': 'info',
+                                                        'type': 'container_output',
+                                                        'tool_specific': True,
+                                                        'container_id': container_info['ID']
+                                                    })
+                                except Exception as container_log_error:
+                                    tool_logs_data['warnings'].append(f"Could not get logs for container {container_info['ID']}: {str(container_log_error)}")
+                                    
                         except json.JSONDecodeError:
                             continue
         except Exception as e:
-            enhanced_logs['warnings'].append(f"Could not check running containers: {str(e)}")
+            tool_logs_data['warnings'].append(f"Could not check running containers: {str(e)}")
         
         # Parse workflow execution log for this tool
         execution_log = run_dir / "logs" / "workflow_execution.log"
@@ -2207,37 +2194,48 @@ def get_enhanced_tool_logs(request, workflow_id, tool_name):
                     if not line:
                         continue
                     
-                    # Check if this line starts a new step for our tool
+                    # Check if this line starts a new step for our specific tool only
                     if f"STEP" in line and tool_name.upper() in line.upper():
-                        current_step = tool_name
-                        in_tool_section = True
-                        step_start_time = datetime.now().isoformat()
-                        
-                        # Extract step information
-                        if "|" in line:
-                            parts = line.split("|")
-                            if len(parts) >= 4:
-                                timestamp_str = parts[0].strip()
-                                message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
+                        # Make sure this is exactly our tool, not a substring match
+                        if f"STEP" in line and f"{tool_name.upper()}" in line.upper():
+                            # Additional check to ensure exact tool match
+                            line_upper = line.upper()
+                            tool_upper = tool_name.upper()
+                            if f"STEP" in line_upper and (f": {tool_upper}" in line_upper or f"/{tool_upper}" in line_upper or line_upper.endswith(tool_upper)):
+                                current_step = tool_name
+                                in_tool_section = True
+                                step_start_time = datetime.now().isoformat()
                                 
-                                enhanced_logs['orchestrator_logs'].append({
+                                # Extract step information
+                                if "|" in line:
+                                    parts = line.split("|")
+                                    if len(parts) >= 4:
+                                        timestamp_str = parts[0].strip()
+                                        message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
+                                        
+                                # Add to both enhanced and basic formats
+                                log_entry = {
                                     'timestamp': timestamp_str,
                                     'message': message,
                                     'level': 'info',
                                     'type': 'step_start',
-                                    'step_number': extract_step_number(message)
-                                })
+                                    'step_number': extract_step_number(message),
+                                    'tool_specific': True
+                                }
+                                tool_logs_data['orchestrator_logs'].append(log_entry)
+                                tool_logs_data['basic_logs'].append(log_entry)
                                 
                                 # Store step details
-                                enhanced_logs['step_details'] = {
+                                tool_logs_data['step_details'] = {
                                     'step_number': extract_step_number(message),
                                     'start_time': timestamp_str,
                                     'tool_name': tool_name,
                                     'status': 'running'
                                 }
                     
-                    # Process tool-related logs
-                    elif in_tool_section and tool_name.lower() in line.lower():
+                    # Process tool-related logs - only for our specific tool
+                    elif in_tool_section and current_step == tool_name:
+                        # Only process logs that are clearly related to our tool during our execution
                         if "|" in line:
                             parts = line.split("|")
                             if len(parts) >= 4:
@@ -2245,68 +2243,125 @@ def get_enhanced_tool_logs(request, workflow_id, tool_name):
                                 level = parts[1].strip().lower()
                                 message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
                                 
-                                # Categorize logs
-                                log_entry = {
-                                    'timestamp': timestamp_str,
-                                    'message': message,
-                                    'level': level,
-                                    'type': 'orchestrator'
-                                }
+                                # Only include if message is relevant to our tool
+                                message_lower = message.lower()
+                                tool_lower = tool_name.lower()
                                 
-                                # Check for specific patterns
-                                if "Docker" in message:
-                                    log_entry['type'] = 'container'
-                                    if "executing" in message.lower():
-                                        enhanced_logs['container_info']['command'] = message
-                                    elif "successful" in message.lower():
-                                        enhanced_logs['container_info']['status'] = 'success'
-                                    elif "failed" in message.lower():
-                                        enhanced_logs['container_info']['status'] = 'failed'
-                                        enhanced_logs['errors'].append(message)
+                                # Very strict filtering: only include logs that are definitely about this tool
+                                is_tool_specific = False
                                 
-                                elif "Progress" in message:
-                                    log_entry['type'] = 'progress'
+                                # 1. Direct tool name mention in the message
+                                if tool_lower in message_lower:
+                                    is_tool_specific = True
                                 
-                                elif "Error" in message or "ERROR" in level:
-                                    log_entry['type'] = 'error'
-                                    enhanced_logs['errors'].append(message)
+                                # 2. Step-specific logs that are clearly about our tool's step execution
+                                elif "step" in message_lower:
+                                    # Only if it's about step execution, not general progress
+                                    if any(keyword in message_lower for keyword in ["output directory", "input files", "execution time"]):
+                                        is_tool_specific = True
                                 
-                                elif "Warning" in message or "WARNING" in level:
-                                    log_entry['type'] = 'warning'
-                                    enhanced_logs['warnings'].append(message)
+                                # 3. Docker/container logs but only if they mention our tool or are clearly execution-related
+                                elif ("docker" in message_lower or "container" in message_lower) and tool_lower in message_lower:
+                                    is_tool_specific = True
                                 
-                                enhanced_logs['orchestrator_logs'].append(log_entry)
+                                # 4. Critical errors during our tool's execution section
+                                elif level in ['error', 'critical'] and in_tool_section:
+                                    is_tool_specific = True
+                                
+                                # Explicit exclusions - never include these
+                                if is_tool_specific:
+                                    # Exclude general workflow setup logs
+                                    if any(exclude_term in message_lower for exclude_term in [
+                                        "workflow started",
+                                        "tools:",
+                                        "total steps:",
+                                        "data directory:",
+                                        "using existing file",
+                                        "previous step completed",
+                                        "ready to start"
+                                    ]):
+                                        is_tool_specific = False
+                                    
+                                    # Exclude logs about other tools
+                                    other_tools = [t for t in ['trimmomatic', 'spades', 'quast', 'fastqc', 'multiqc'] if t != tool_lower]
+                                    if any(other_tool in message_lower for other_tool in other_tools):
+                                        # Only exclude if it's clearly about the other tool, not just mentioning it
+                                        if not tool_lower in message_lower:
+                                            is_tool_specific = False
+                                
+                                if is_tool_specific:
+                                    # Categorize logs
+                                    log_entry = {
+                                        'timestamp': timestamp_str,
+                                        'message': message,
+                                        'level': level,
+                                        'type': 'orchestrator',
+                                        'tool_specific': True
+                                    }
+                                    
+                                    # Check for specific patterns
+                                    if "Docker" in message or "docker" in message.lower():
+                                        log_entry['type'] = 'container'
+                                        if "executing" in message.lower():
+                                            tool_logs_data['container_info']['command'] = message
+                                        elif "successful" in message.lower():
+                                            tool_logs_data['container_info']['status'] = 'success'
+                                        elif "failed" in message.lower():
+                                            tool_logs_data['container_info']['status'] = 'failed'
+                                            tool_logs_data['errors'].append(message)
+                                    
+                                    elif "Progress" in message:
+                                        log_entry['type'] = 'progress'
+                                    
+                                    elif "Error" in message or "ERROR" in level:
+                                        log_entry['type'] = 'error'
+                                        tool_logs_data['errors'].append(message)
+                                    
+                                    elif "Warning" in message or "WARNING" in level:
+                                        log_entry['type'] = 'warning'
+                                        tool_logs_data['warnings'].append(message)
+                                    
+                                    # Add to both enhanced and basic formats
+                                    tool_logs_data['orchestrator_logs'].append(log_entry)
+                                    tool_logs_data['basic_logs'].append(log_entry)
                     
-                    # Check for step completion
-                    elif in_tool_section and ("COMPLETED" in line or "FAILED" in line) and tool_name.upper() in line.upper():
-                        if "|" in line:
-                            parts = line.split("|")
-                            if len(parts) >= 4:
-                                timestamp_str = parts[0].strip()
-                                level = parts[1].strip().lower()
-                                message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
-                                
-                                enhanced_logs['orchestrator_logs'].append({
+                    # Check for step completion - only for our specific tool
+                    elif in_tool_section and current_step == tool_name and ("COMPLETED" in line or "FAILED" in line) and tool_name.upper() in line.upper():
+                        # Ensure this completion is for our exact tool
+                        line_upper = line.upper()
+                        tool_upper = tool_name.upper()
+                        if f"{tool_upper}" in line_upper and ("COMPLETED" in line_upper or "FAILED" in line_upper):
+                            if "|" in line:
+                                parts = line.split("|")
+                                if len(parts) >= 4:
+                                    timestamp_str = parts[0].strip()
+                                    level = parts[1].strip().lower()
+                                    message = parts[4].strip() if len(parts) > 4 else parts[3].strip()
+                                    
+                                completion_entry = {
                                     'timestamp': timestamp_str,
                                     'message': message,
                                     'level': level,
-                                    'type': 'step_completion'
-                                })
+                                    'type': 'step_completion',
+                                    'tool_specific': True
+                                }
+                                tool_logs_data['orchestrator_logs'].append(completion_entry)
+                                tool_logs_data['basic_logs'].append(completion_entry)
                                 
                                 # Update step details
-                                if enhanced_logs['step_details']:
-                                    enhanced_logs['step_details']['end_time'] = timestamp_str
-                                    enhanced_logs['step_details']['status'] = 'completed' if 'COMPLETED' in line else 'failed'
+                                if tool_logs_data['step_details']:
+                                    tool_logs_data['step_details']['end_time'] = timestamp_str
+                                    tool_logs_data['step_details']['status'] = 'completed' if 'COMPLETED' in line else 'failed'
                                 
                                 # Extract execution time if available
                                 if "Execution Time:" in message:
                                     try:
                                         time_part = message.split("Execution Time:")[1].split("seconds")[0].strip()
-                                        enhanced_logs['execution_summary']['execution_time'] = float(time_part)
+                                        tool_logs_data['execution_summary']['execution_time'] = float(time_part)
                                     except:
                                         pass
-                                
-                                in_tool_section = False
+                                    
+                                    in_tool_section = False
                     
                     # Check if we've moved to a different tool
                     elif "STEP" in line and tool_name.upper() not in line.upper():
@@ -2319,26 +2374,36 @@ def get_enhanced_tool_logs(request, workflow_id, tool_name):
                 try:
                     with open(step_file, 'r') as f:
                         step_data = json.load(f)
-                        enhanced_logs['execution_summary'].update({
-                            'success': step_data.get('success', False),
-                            'output_files_count': len(step_data.get('output_files', [])),
-                            'execution_time': step_data.get('execution_time', 0),
-                            'tool_version': step_data.get('tool_version'),
-                            'memory_used': step_data.get('memory_used'),
-                            'cpu_time': step_data.get('cpu_time')
+                        
+                        # The step result data is nested under 'result' key
+                        result_data = step_data.get('result', {})
+                        
+                        tool_logs_data['execution_summary'].update({
+                            'success': result_data.get('success', False),
+                            'output_files_count': len(result_data.get('output_files', [])),
+                            'execution_time': result_data.get('execution_time', 0),
+                            'tool_version': result_data.get('tool_version'),
+                            'memory_used': result_data.get('memory_used'),
+                            'cpu_time': result_data.get('cpu_time')
                         })
                         
-                        if not step_data.get('success'):
-                            enhanced_logs['errors'].append(step_data.get('error_message', 'Unknown error'))
+                        if not result_data.get('success', False):
+                            error_msg = result_data.get('error_message', 'Unknown error')
+                            if error_msg:  # Only add non-empty error messages
+                                tool_logs_data['errors'].append(error_msg)
                 except Exception as e:
-                    enhanced_logs['warnings'].append(f"Could not read step result: {str(e)}")
+                    tool_logs_data['warnings'].append(f"Could not read step result: {str(e)}")
         
-        # Sort logs by timestamp
-        enhanced_logs['orchestrator_logs'].sort(key=lambda x: x['timestamp'])
+        # Sort logs by timestamp for both formats
+        tool_logs_data['orchestrator_logs'].sort(key=lambda x: x['timestamp'])
+        tool_logs_data['basic_logs'].sort(key=lambda x: x['timestamp'])
         
         return JsonResponse({
             'success': True,
-            'data': enhanced_logs
+            'data': tool_logs_data,
+            'logs': tool_logs_data['basic_logs'],  # For backward compatibility
+            'tool_name': tool_name,
+            'total_logs': len(tool_logs_data['basic_logs'])
         })
         
     except Exception as e:
@@ -2780,3 +2845,107 @@ def save_issues_log(workflow_id, run_dir, issues):
         
     except Exception as e:
         print(f"❌ Failed to save issues log: {str(e)}")
+
+def get_container_status(request, workflow_id):
+    """Get real-time container status for a workflow"""
+    try:
+        import subprocess
+        import json
+        from datetime import datetime
+        
+        # Get all containers for this workflow
+        result = subprocess.run([
+            'docker', 'ps', '--all', '--filter', f'name={workflow_id}', '--format', 
+            '{"id":"{{.ID}}","name":"{{.Names}}","status":"{{.Status}}","image":"{{.Image}}","created":"{{.CreatedAt}}"}'
+        ], capture_output=True, text=True, timeout=10)
+        
+        containers = []
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    try:
+                        container_info = json.loads(line)
+                        
+                        # Extract tool name from container name
+                        tool_name = 'unknown'
+                        container_name = container_info.get('name', '')
+                        if 'step' in container_name:
+                            # Extract tool name from pattern: bioframe-{workflow_id}-step{N}-{tool}-{timestamp}
+                            parts = container_name.split('-')
+                            if len(parts) >= 4:
+                                # Find the tool name (after step part)
+                                for i, part in enumerate(parts):
+                                    if part.startswith('step') and i + 1 < len(parts):
+                                        tool_name = parts[i + 1]
+                                        break
+                        
+                        # Determine container status
+                        status_text = container_info.get('status', '').lower()
+                        if 'up' in status_text:
+                            status = 'running'
+                        elif 'exited (0)' in status_text:
+                            status = 'exited'
+                        elif 'exited' in status_text:
+                            status = 'failed'
+                        else:
+                            status = 'unknown'
+                        
+                        containers.append({
+                            'id': container_info.get('id'),
+                            'name': container_info.get('name'),
+                            'status': status,
+                            'status_text': container_info.get('status'),
+                            'image': container_info.get('image'),
+                            'created': container_info.get('created'),
+                            'tool_name': tool_name
+                        })
+                        
+                    except json.JSONDecodeError:
+                        continue
+        
+        return JsonResponse({
+            'success': True,
+            'containers': containers,
+            'count': len(containers)
+        })
+        
+    except subprocess.TimeoutExpired:
+        return JsonResponse({'success': False, 'error': 'Timeout while checking container status'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+
+def get_workflow_files(request, workflow_id):
+    """Get list of files generated by workflow"""
+    try:
+        import os
+        from pathlib import Path
+        
+        # Get workflow run directory
+        run_dir = Path(f'data/runs/{workflow_id}')
+        files = []
+        
+        if run_dir.exists():
+            # Find all output files in step directories
+            for step_dir in run_dir.glob('step_*'):
+                if step_dir.is_dir():
+                    for file_path in step_dir.rglob('*'):
+                        if file_path.is_file() and file_path.name not in ['.gitkeep', 'Dockerfile']:
+                            file_info = {
+                                'name': file_path.name,
+                                'path': str(file_path.relative_to(run_dir)),
+                                'size': file_path.stat().st_size,
+                                'step': step_dir.name,
+                                'type': file_path.suffix.lower() if file_path.suffix else 'unknown'
+                            }
+                            files.append(file_info)
+        
+        return JsonResponse({
+            'success': True,
+            'files': files,
+            'count': len(files)
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e), 'files': []})

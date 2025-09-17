@@ -1,0 +1,1 @@
+{"success": true, "containers": [{"id": "ea48db244f2f", "name": "bioframe-02ad4683-1f04-48ec-ac45-e113b992567a-step2-spades-1758102828", "status": "running", "status_text": "Up 13 minutes", "image": "bioframe-spades:latest", "created": "2025-09-17 09:53:48 +0000 UTC", "tool_name": "spades"}], "count": 1}

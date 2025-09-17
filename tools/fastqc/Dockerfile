@@ -13,7 +13,12 @@ FROM ubuntu:22.04
 # tool_color: blue
 # tool_commands: fastqc
 # tool_primary_command: fastqc
-# tool_command_template: fastqc {input_files} -o {output_dir} {options}
+# tool_command_template: mkdir -p {output_dir} && fastqc {input_files} -o {output_dir} --noextract
+# tool_memory_requirement: 2g
+# tool_cpu_requirement: 2
+# tool_expected_outputs: {output_dir}/*_fastqc.html,{output_dir}/*_fastqc.zip
+# tool_success_indicators: Analysis complete
+# tool_failure_indicators: Failed to process,Exception,Error
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

@@ -11,7 +11,6 @@
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">{{ workflow.name }}</h1>
-                    <p class="mt-2 text-gray-600">{{ workflow.description }}</p>
                     <!-- Workflow ID Display -->
                     <div class="mt-3 flex items-center space-x-2">
                         <span class="text-sm font-medium text-gray-500">Workflow ID:</span>
@@ -103,6 +102,118 @@
                     {{ workflow.progress|floatformat:1 }}% Complete
                 </div>
             </div>
+        </div>
+
+        <!-- Input Files Section -->
+        <div class="bg-white shadow rounded-lg p-6 mb-8">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-file-import mr-2 text-blue-600"></i>
+                    Input Files
+                </h3>
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-500">{{ input_files|length }} file{{ input_files|length|pluralize }}</span>
+                    <button onclick="refreshInputFiles()" 
+                            class="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+                        <i class="fas fa-refresh mr-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            
+            {% if input_files %}
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {% for file in input_files %}
+                    <div class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0">
+                                <!-- File Name and Icon -->
+                                <div class="flex items-center space-x-3 mb-2">
+                                    <div class="flex-shrink-0">
+                                        {% if file.type == '.fastq' or file.type == '.fq' %}
+                                            <i class="fas fa-dna text-green-600 text-lg"></i>
+                                        {% elif file.type == '.gz' %}
+                                            <i class="fas fa-file-archive text-orange-600 text-lg"></i>
+                                        {% elif file.type == '.fasta' or file.type == '.fa' %}
+                                            <i class="fas fa-dna text-blue-600 text-lg"></i>
+                                        {% elif file.type == '.sam' or file.type == '.bam' %}
+                                            <i class="fas fa-align-left text-purple-600 text-lg"></i>
+                                        {% elif file.type == '.vcf' %}
+                                            <i class="fas fa-exchange-alt text-red-600 text-lg"></i>
+                                        {% else %}
+                                            <i class="fas fa-file text-gray-600 text-lg"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="text-sm font-medium text-gray-900 truncate" title="{{ file.name }}">
+                                            {{ file.name }}
+                                        </h4>
+                                        <p class="text-xs text-gray-500">
+                                            {% if file.type %}
+                                                {{ file.type|upper|slice:"1:" }} File
+                                            {% else %}
+                                                Unknown Type
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <!-- File Details -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-gray-500">Size:</span>
+                                        <span class="font-medium text-gray-700">
+                                            {% if file.size < 1024 %}
+                                                {{ file.size }} B
+                                            {% elif file.size < 1048576 %}
+                                                {% widthratio file.size 1024 1 %} KB
+                                            {% elif file.size < 1073741824 %}
+                                                {% widthratio file.size 1048576 1 %} MB
+                                            {% else %}
+                                                {% widthratio file.size 1073741824 1 %} GB
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-gray-500">Modified:</span>
+                                        <span class="font-medium text-gray-700">
+                                            {{ file.modified_at|date:"M d, Y H:i" }}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-gray-500">Path:</span>
+                                        <code class="text-xs bg-gray-100 px-2 py-1 rounded font-mono text-gray-600 max-w-xs truncate" title="{{ file.relative_path }}">
+                                            {{ file.relative_path }}
+                                        </code>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="flex-shrink-0 ml-4">
+                                <div class="flex flex-col space-y-2">
+                                    <button onclick="downloadFile('{{ file.relative_path }}')" 
+                                            class="text-xs text-blue-600 hover:text-blue-800 transition-colors p-1 rounded hover:bg-blue-50"
+                                            title="Download file">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                    <button onclick="copyFilePath('{{ file.path }}')" 
+                                            class="text-xs text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-gray-50"
+                                            title="Copy file path">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center text-gray-500 py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <i class="fas fa-file-import text-4xl mb-4 text-gray-400"></i>
+                    <h4 class="text-lg font-medium mb-2">No Input Files Found</h4>
+                    <p class="text-sm">This workflow doesn't have any input files, or they haven't been uploaded yet.</p>
+                </div>
+            {% endif %}
         </div>
 
         <!-- Pipeline Execution & Results -->
@@ -214,12 +325,13 @@
                                                 <span class="text-xs text-gray-500">{{ file.size|filesizeformat }}</span>
                                             </div>
                                             <div class="flex space-x-2">
-                                                <button onclick="viewFile('{{ file.relative_path }}', '{{ file.name }}')" 
-                                                        class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors">
-                                                    <i class="fas fa-eye mr-1"></i>View
+                                                <button onclick="openFileInWindows('{{ file.relative_path }}', '{{ file.name }}')" 
+                                                        class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                                                        title="Open file in browser (HTML reports) or download">
+                                                    <i class="fas fa-external-link-alt mr-1"></i>Open
                                                 </button>
                                                 <button onclick="downloadFile('{{ file.relative_path }}')" 
-                                                        class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors">
+                                                        class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 transition-colors">
                                                     <i class="fas fa-download mr-1"></i>Download
                                                 </button>
                                             </div>
@@ -290,6 +402,34 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Real-time Container Monitoring -->
+            <div class="border-t border-gray-200 pt-4 mt-4">
+                <div class="mb-4">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <i class="fas fa-docker mr-3 text-blue-500"></i>
+                            🔄 Real-time Container Monitoring
+                        </h4>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                            <span class="text-xs text-gray-500">Live Updates</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="container-monitoring-section" class="space-y-4">
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 shadow-sm">
+                        <div class="text-center">
+                            <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
+                                <i class="fas fa-spinner fa-spin text-blue-600 text-lg"></i>
+                            </div>
+                            <p class="text-gray-600 font-medium">Loading container status...</p>
+                            <p class="text-xs text-gray-500 mt-1">Scanning for active containers</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Global Workflow Logs are now integrated into Execution Logs & Status section above -->
@@ -332,7 +472,7 @@
                                         class="text-sm text-blue-600 hover:text-blue-800">
                                     <i class="fas fa-eye mr-1"></i>Toggle Log
                                 </button>
-                                <button onclick="refreshToolLog('{{ tool.tool_name|lower }}')" 
+                                <button onclick="refreshToolLog('{{ tool.tool_name|lower }}', 'orchestrator', true)" 
                                         class="text-sm text-green-600 hover:text-green-800">
                                     <i class="fas fa-sync-alt mr-1"></i>Refresh
                                 </button>
@@ -340,7 +480,7 @@
                         </div>
                     </div>
                     <div id="tool-log-{{ tool.tool_name|lower }}" class="hidden">
-                        <!-- Tool Log Tabs -->
+                        <!-- Tool Log Tabs - Dynamic for all tools -->
                         <div class="border-b border-gray-200">
                             <nav class="flex space-x-8 px-3" aria-label="Tool Log Tabs">
                                 <button onclick="switchToolLogTab('{{ tool.tool_name|lower }}', 'orchestrator')" 
@@ -348,35 +488,32 @@
                                         class="tool-log-tab border-b-2 border-blue-500 text-blue-600 py-2 px-1 text-sm font-medium">
                                     Orchestrator Logs
                                 </button>
-                                {% if tool.tool_name|lower == 'spades' or tool.tool_name|lower == 'quast' or tool.tool_name|lower == 'fastqc' or tool.tool_name|lower == 'multiqc' %}
+                                <!-- All tools can have Tool Log File tab if log file exists -->
                                 <button onclick="switchToolLogTab('{{ tool.tool_name|lower }}', 'tool')" 
                                         id="tab-{{ tool.tool_name|lower }}-tool"
                                         class="tool-log-tab border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium">
                                     Tool Log File
                                 </button>
-                                {% endif %}
                             </nav>
                         </div>
                         
                         <!-- Orchestrator Logs Tab -->
                         <div id="orchestrator-logs-{{ tool.tool_name|lower }}" class="tool-log-content">
-                            <!-- Always show live monitoring -->
-                            <div id="live-logs-container" class="bg-black p-2 rounded font-mono text-xs h-64 overflow-y-auto">
-                                <div class="text-gray-500">Loading real-time monitoring...</div>
+                            <!-- Consistent log container for all tools -->
+                            <div class="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs h-64 overflow-y-auto border border-gray-700">
+                                <div class="text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading orchestrator logs...</div>
                             </div>
                         </div>
                         
-                        <!-- Tool Log File Tab -->
-                        {% if tool.tool_name|lower == 'spades' or tool.tool_name|lower == 'quast' or tool.tool_name|lower == 'fastqc' or tool.tool_name|lower == 'multiqc' %}
+                        <!-- Tool Log File Tab - Available for all tools -->
                         <div id="tool-logs-{{ tool.tool_name|lower }}" class="tool-log-content hidden">
-                            <div class="bg-gray-900 text-green-400 p-3 font-mono text-xs h-64 overflow-y-auto">
+                            <div class="bg-gray-900 text-green-400 p-3 font-mono text-xs h-64 overflow-y-auto border border-gray-700">
                                 <div class="text-gray-500">
                                     <i class="fas fa-file-alt mr-2"></i>
                                     Loading {{ tool.tool_name }} log file...
                                 </div>
                             </div>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -472,6 +609,7 @@
 <script>
 let fileOutputs = document.getElementById('file-outputs');
 let statusPollingInterval;
+let logPollingInterval;
 
 // Workflow ID from URL
 const workflowId = '{{ workflow.id }}';
@@ -481,7 +619,7 @@ async function startWorkflow() {
     try {
         console.log('🚀 Starting workflow execution...');
         
-        const response = await fetch(`/workflows/${workflowId}/start/`, {
+        const response = await fetch(`/workflow/${workflowId}/start/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -503,7 +641,7 @@ async function startWorkflow() {
 // Refresh workflow status
 async function refreshStatus() {
     try {
-        const response = await fetch(`/workflows/${workflowId}/status/`);
+        const response = await fetch(`/workflow/${workflowId}/status/`);
         if (response.ok) {
             const data = await response.json();
             updateWorkflowStatus(data);
@@ -535,10 +673,53 @@ async function refreshWorkflowExecutionLog() {
     }
 }
 
+// Completion scanning is now handled automatically in the background by the orchestrator
+
 // Download workflow results
 function downloadResults() {
     console.log('📥 Preparing results download...');
     // Implementation for downloading results
+}
+
+// Input Files Functions
+function refreshInputFiles() {
+    console.log('🔄 Refreshing input files...');
+    location.reload();
+}
+
+function downloadFile(relativePath) {
+    console.log('📥 Downloading file:', relativePath);
+    const downloadUrl = `/workflow/{{ workflow.id }}/download-file/?file=${encodeURIComponent(relativePath)}`;
+    
+    // Create a temporary anchor element to trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = relativePath.split('/').pop(); // Use filename as download name
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function copyFilePath(filePath) {
+    navigator.clipboard.writeText(filePath).then(() => {
+        console.log('📋 File path copied to clipboard:', filePath);
+        
+        // Show a temporary success message
+        const button = event.target.closest('button');
+        const originalIcon = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check text-green-600"></i>';
+        button.title = 'Copied!';
+        
+        setTimeout(() => {
+            button.innerHTML = originalIcon;
+            button.title = 'Copy file path';
+        }, 2000);
+    }).catch(err => {
+        console.error('❌ Failed to copy file path:', err);
+        
+        // Fallback: show the path in an alert
+        alert(`File path: ${filePath}`);
+    });
 }
 
 // Live log functionality has been removed - only Workflow Execution Log is now displayed
@@ -648,7 +829,7 @@ function updateToolStatus(tools) {
 // Load file outputs
 async function loadFileOutputs() {
     try {
-        const response = await fetch(`/workflows/${workflowId}/files/`);
+        const response = await fetch(`/workflow/${workflowId}/files/`);
         if (response.ok) {
             const files = await response.json();
             renderFileOutputs(files);
@@ -668,6 +849,10 @@ function refreshFileOutputs() {
 
 // Render file outputs
 function renderFileOutputs(files) {
+    if (!fileOutputs) {
+        console.error('File outputs container not found');
+        return;
+    }
     fileOutputs.innerHTML = '';
     
     if (files.length === 0) {
@@ -731,53 +916,193 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// View file content
-async function viewFile(filePath, fileName) {
-    try {
-        const response = await fetch(`/workflows/{{ workflow.id }}/view-file/?file=${encodeURIComponent(filePath)}`);
-        if (response.ok) {
-            const content = await response.text();
-            
-            // Create modal to display file content
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
-            modal.innerHTML = `
-                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-lg font-medium text-gray-900">${fileName}</h3>
-                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
-                    <div class="max-h-96 overflow-y-auto">
-                        <pre class="text-sm text-gray-700 bg-gray-50 p-4 rounded border font-mono">${content}</pre>
-                    </div>
-                    <div class="mt-4 flex justify-end">
-                        <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        } else {
-            alert('Failed to load file content');
-        }
-    } catch (error) {
-        console.error('Error viewing file:', error);
-        alert('Error loading file content');
-    }
-}
-
 // Download file
 function downloadFile(filePath) {
-    const downloadUrl = `/workflows/{{ workflow.id }}/download-file/?file=${encodeURIComponent(filePath)}`;
+    const downloadUrl = `/workflow/{{ workflow.id }}/download-file/?file=${encodeURIComponent(filePath)}`;
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = filePath.split('/').pop();
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// Open file using web download - No batch scripts needed!
+async function openFileInWindows(filePath, fileName) {
+    try {
+        console.log('Opening file:', filePath);
+        
+        // Use the relative path directly (same as page display logic)
+        const response = await fetch(`/workflow/{{ workflow.id }}/open-file/?file=${encodeURIComponent(filePath)}`);
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                console.log('Open method:', result.method);
+                
+                if (result.method === 'web_download') {
+                    // File ready for web download - open in new tab
+                    const downloadUrl = result.download_url;
+                    showTemporaryMessage(`🌐 Opening "${fileName}" in your browser...`, 'success');
+                    
+                    // Open the file directly in a new tab
+                    window.open(downloadUrl, '_blank');
+                    
+                    // Show additional info
+                    setTimeout(() => {
+                        showTemporaryMessage(`📄 File opened: ${fileName}`, 'info');
+                    }, 1000);
+                    
+                } else {
+                    // Fallback for other methods
+                    showTemporaryMessage(`📁 Opening "${fileName}"`, 'success');
+                }
+                
+            } else {
+                showTemporaryMessage(`❌ ${result.error}`, 'error');
+                console.error('Failed to open file:', result);
+            }
+        } else {
+            const errorText = await response.text();
+            console.error('Server error:', errorText);
+            showTemporaryMessage(`❌ Server error: ${response.status}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error opening file:', error);
+        showTemporaryMessage(`Network error: ${error.message}`, 'error');
+    }
+}
+
+// Show temporary message
+function showTemporaryMessage(message, type = 'info') {
+    const messageDiv = document.createElement('div');
+    const bgColor = type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 
+                   type === 'success' ? 'bg-green-100 border-green-400 text-green-700' :
+                   'bg-blue-100 border-blue-400 text-blue-700';
+    
+    messageDiv.className = `fixed top-4 right-4 ${bgColor} border px-4 py-3 rounded z-50`;
+    messageDiv.innerHTML = `
+        <div class="flex">
+            <div class="py-1">
+                <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : type === 'success' ? 'fa-check-circle' : 'fa-info-circle'} mr-2"></i>
+                ${message}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        if (messageDiv.parentNode) {
+            messageDiv.parentNode.removeChild(messageDiv);
+        }
+    }, 3000);
+}
+
+// Show Windows file opening instructions
+function showWindowsOpenInstructions(filePath, fileName) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+    modal.innerHTML = `
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-external-link-alt mr-2 text-yellow-600"></i>Open File in Windows
+                </h3>
+                <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <p class="text-sm text-gray-700 mb-3">
+                    To open <strong>${fileName}</strong> with its default Windows application:
+                </p>
+                
+                <div class="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+                    <h4 class="font-medium text-blue-800 mb-2">Method 1: Copy Path & Run</h4>
+                    <div class="bg-gray-100 p-2 rounded font-mono text-sm mb-2 break-all">
+                        ${filePath}
+                    </div>
+                    <button onclick="copyToClipboard('${filePath}', this)" 
+                            class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                        <i class="fas fa-copy mr-1"></i>Copy Path
+                    </button>
+                    <p class="text-xs text-blue-700 mt-2">
+                        1. Click "Copy Path" above<br>
+                        2. Press Win + R to open Run dialog<br>
+                        3. Paste the path and press Enter<br>
+                        4. The file will open with its default application
+                    </p>
+                </div>
+                
+                <div class="bg-green-50 border border-green-200 rounded p-3 mb-3">
+                    <h4 class="font-medium text-green-800 mb-2">Method 2: Windows Explorer</h4>
+                    <p class="text-xs text-green-700">
+                        1. Open Windows Explorer (Win + E)<br>
+                        2. Navigate to the file path above<br>
+                        3. Double-click the file to open it<br>
+                        4. Windows will use the default application for this file type
+                    </p>
+                </div>
+                
+                <div class="bg-yellow-50 border border-yellow-200 rounded p-3">
+                    <h4 class="font-medium text-yellow-800 mb-2">Method 3: Command Line</h4>
+                    <p class="text-xs text-yellow-700 mb-2">Open Command Prompt and run:</p>
+                    <div class="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs mb-2">
+                        start "" "${filePath}"
+                    </div>
+                    <button onclick="copyToClipboard('start &quot;&quot; &quot;${filePath}&quot;', this)" 
+                            class="text-sm bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700">
+                        <i class="fas fa-copy mr-1"></i>Copy Command
+                    </button>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button onclick="copyToClipboard('${filePath}', this)" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    <i class="fas fa-copy mr-1"></i>Copy File Path
+                </button>
+                <button onclick="this.closest('.fixed').remove()" 
+                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">
+                    Close
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// Helper function to copy text to clipboard with feedback
+function copyToClipboard(text, button) {
+    navigator.clipboard.writeText(text).then(function() {
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check text-green-600 mr-1"></i>Copied!';
+        button.disabled = true;
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check text-green-600 mr-1"></i>Copied!';
+        button.disabled = true;
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }, 2000);
+    });
 }
 
 // Initialize page
@@ -841,59 +1166,131 @@ document.addEventListener('DOMContentLoaded', function() {
         const orchestratorContent = document.getElementById(`orchestrator-logs-${toolName}`);
         const toolContent = document.getElementById(`tool-logs-${toolName}`);
         
+        // Check if elements exist
+        if (!orchestratorTab || !orchestratorContent) {
+            console.error(`Missing elements for tool: ${toolName}`);
+            return;
+        }
+        
         if (tabType === 'orchestrator') {
             orchestratorTab.className = 'tool-log-tab border-b-2 border-blue-500 text-blue-600 py-2 px-1 text-sm font-medium';
-            toolTab.className = 'tool-log-tab border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium';
+            if (toolTab) toolTab.className = 'tool-log-tab border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium';
             orchestratorContent.classList.remove('hidden');
-            toolContent.classList.add('hidden');
+            if (toolContent) toolContent.classList.add('hidden');
             refreshToolLog(toolName, 'orchestrator');
         } else {
-            toolTab.className = 'tool-log-tab border-b-2 border-blue-500 text-blue-600 py-2 px-1 text-sm font-medium';
-            orchestratorTab.className = 'tool-log-tab border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium';
-            toolContent.classList.remove('hidden');
-            orchestratorContent.classList.add('hidden');
+            if (toolTab && toolContent) {
+                toolTab.className = 'tool-log-tab border-b-2 border-blue-500 text-blue-600 py-2 px-1 text-sm font-medium';
+                orchestratorTab.className = 'tool-log-tab border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium';
+                toolContent.classList.remove('hidden');
+                orchestratorContent.classList.add('hidden');
+            }
             refreshToolLog(toolName, 'tool');
         }
     }
     
-    function refreshToolLog(toolName, logType = 'orchestrator') {
+    // Store last log data to prevent unnecessary updates
+    const toolLogCache = {};
+    
+    function refreshToolLog(toolName, logType = 'orchestrator', forceRefresh = false) {
         let logContent;
         if (logType === 'orchestrator') {
+            // Always use the consistent container that's created in HTML
             logContent = document.querySelector(`#orchestrator-logs-${toolName} .bg-gray-900`);
+            
+            // If for some reason it doesn't exist, create one with consistent styling
+            if (!logContent) {
+                const orchestratorContainer = document.getElementById(`orchestrator-logs-${toolName}`);
+                if (orchestratorContainer) {
+                    logContent = document.createElement('div');
+                    logContent.className = 'bg-gray-900 text-green-400 p-3 rounded font-mono text-xs h-64 overflow-y-auto border border-gray-700';
+                    orchestratorContainer.innerHTML = '';
+                    orchestratorContainer.appendChild(logContent);
+                }
+            }
         } else {
             logContent = document.querySelector(`#tool-logs-${toolName} .bg-gray-900`);
         }
         
         if (!logContent) return;
         
-        logContent.innerHTML = '<div class="text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading enhanced orchestrator logs...</div>';
+        // Remember scroll position to prevent jumping
+        const scrollTop = logContent.scrollTop;
+        const isScrolledToBottom = scrollTop >= (logContent.scrollHeight - logContent.clientHeight - 5);
+        
+        // Only show loading if this is the first load or forced refresh
+        if (!toolLogCache[toolName] || forceRefresh) {
+            logContent.innerHTML = '<div class="text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading orchestrator logs...</div>';
+        }
         
         if (logType === 'orchestrator') {
-            // Fetch enhanced orchestrator logs
-            fetch(`/workflow/{{ workflow.id }}/enhanced-tool-logs/${toolName}/`)
+            // Show subtle refresh indicator if content exists
+            const refreshIndicator = document.getElementById(`refresh-indicator-${toolName}`);
+            if (refreshIndicator && !forceRefresh && toolLogCache[toolName]) {
+                refreshIndicator.style.display = 'inline';
+            }
+            
+            // Fetch comprehensive tool logs from unified endpoint
+            fetch(`/workflow/{{ workflow.id }}/tool-logs/${toolName}/`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success && data.data) {
-                        displayEnhancedToolLogs(logContent, data.data);
+                    // Hide refresh indicator
+                    if (refreshIndicator) {
+                        refreshIndicator.style.display = 'none';
+                    }
+                    if (data.success) {
+                        // Check if data has actually changed to prevent flickering
+                        const dataHash = JSON.stringify(data);
+                        const now = Date.now();
+                        const cacheAge = toolLogCache[toolName] ? (now - toolLogCache[toolName].timestamp) : 0;
+                        const maxCacheAge = 30000; // 30 seconds max cache age
+                        
+                        if (!forceRefresh && toolLogCache[toolName] && 
+                            toolLogCache[toolName].hash === dataHash && 
+                            cacheAge < maxCacheAge) {
+                            // Data hasn't changed and cache is still fresh, don't update display
+                            return;
+                        }
+                        
+                        // Store new data
+                        toolLogCache[toolName] = {
+                            hash: dataHash,
+                            data: data,
+                            timestamp: Date.now()
+                        };
+                        
+                        if (data.data && Object.keys(data.data).length > 0) {
+                            // Use enhanced display if we have rich data
+                            displayEnhancedToolLogs(logContent, data.data, toolName);
+                        } else if (data.logs && data.logs.length > 0) {
+                            // Fall back to basic display if we only have basic logs
+                            displayBasicToolLogs(logContent, data.logs, toolName);
+                        } else {
+                            displayNoLogsMessage(logContent, toolName);
+                        }
+                        
+                        // Restore scroll position intelligently
+                        setTimeout(() => {
+                            if (isScrolledToBottom) {
+                                // If user was at bottom, keep them at bottom (for new logs)
+                                logContent.scrollTop = logContent.scrollHeight;
+                            } else {
+                                // If user was reading somewhere else, don't move them
+                                logContent.scrollTop = scrollTop;
+                            }
+                        }, 10);
+                        
                     } else {
-                        // Fallback to basic logs if enhanced logs fail
-                        fetch(`/workflow/{{ workflow.id }}/tool-logs/${toolName}/`)
-                            .then(response => response.json())
-                            .then(fallbackData => {
-                                if (fallbackData.success && fallbackData.logs) {
-                                    displayBasicToolLogs(logContent, fallbackData.logs);
-                                } else {
-                                    logContent.innerHTML = '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
-                                }
-                            })
-                            .catch(() => {
-                                logContent.innerHTML = '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
-                            });
+                        displayErrorMessage(logContent, toolName, data.error || 'Failed to load logs');
                     }
                 })
                 .catch(error => {
-                    console.error('Error fetching enhanced orchestrator logs:', error);
-                    logContent.innerHTML = '<div class="text-red-500">Error loading enhanced orchestrator logs</div>';
+                    // Hide refresh indicator on error
+                    if (refreshIndicator) {
+                        refreshIndicator.style.display = 'none';
+                    }
+                    console.error('Error fetching tool logs:', error);
+                    displayErrorMessage(logContent, toolName, 'Network error loading logs');
                 });
         } else {
             // Fetch tool log file
@@ -920,13 +1317,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    function displayEnhancedToolLogs(container, data) {
+    function displayEnhancedToolLogs(container, data, toolName) {
         let logHtml = '';
         
         // Display execution summary if available
         if (data.execution_summary && Object.keys(data.execution_summary).length > 0) {
             logHtml += '<div class="mb-4 p-3 bg-blue-900 border border-blue-700 rounded">';
-            logHtml += '<div class="text-blue-300 font-medium mb-2">📊 Execution Summary</div>';
+            logHtml += `<div class="text-blue-300 font-medium mb-2">📊 ${toolName.toUpperCase()} Execution Summary</div>`;
             if (data.execution_summary.success !== undefined) {
                 const status = data.execution_summary.success ? '✅ Success' : '❌ Failed';
                 logHtml += `<div class="text-sm text-green-400">Status: ${status}</div>`;
@@ -946,127 +1343,231 @@ document.addEventListener('DOMContentLoaded', function() {
             logHtml += '</div>';
         }
         
-        // Display container info if available
-        if (data.container_info && Object.keys(data.container_info).length > 0) {
-            logHtml += '<div class="mb-4 p-3 bg-purple-900 border border-purple-700 rounded">';
-            logHtml += '<div class="text-purple-300 font-medium mb-2">🐳 Container Information</div>';
-            if (data.container_info.status) {
-                const statusColor = data.container_info.status === 'success' ? 'text-green-400' : 'text-red-400';
-                logHtml += `<div class="text-sm ${statusColor}">Status: ${data.container_info.status}</div>`;
-            }
-            if (data.container_info.command) {
-                logHtml += `<div class="text-sm text-cyan-400">Command: ${data.container_info.command}</div>`;
-            }
-            logHtml += '</div>';
-        }
+        // Container info is now integrated into the real-time monitoring section below
         
-        // Display real-time container monitoring
-        if (data.running_containers && data.running_containers.length > 0) {
-            logHtml += '<div class="mb-4 p-3 bg-green-900 border border-green-700 rounded">';
-            logHtml += '<div class="text-green-300 font-medium mb-2">🔄 Real-time Container Monitoring</div>';
-            logHtml += '<div class="text-sm text-green-400 mb-2">Live Status: <span class="text-yellow-400">RUNNING</span></div>';
-            
-            data.running_containers.forEach(container => {
-                logHtml += '<div class="mb-2 p-2 bg-gray-800 border border-gray-600 rounded">';
-                logHtml += `<div class="text-sm text-cyan-400">Container: ${container.name || container.id}</div>`;
-                logHtml += `<div class="text-xs text-gray-300">ID: ${container.id}</div>`;
-                logHtml += `<div class="text-xs text-yellow-400">Status: ${container.status}</div>`;
-                if (container.started_at) {
-                    logHtml += `<div class="text-xs text-gray-400">Started: ${new Date(container.started_at).toLocaleString()}</div>`;
-                }
-                if (container.tool_name) {
-                    logHtml += `<div class="text-xs text-purple-400">Tool: ${container.tool_name}</div>`;
-                }
-                logHtml += '</div>';
-            });
-            logHtml += '</div>';
-        }
+        // Real-time container monitoring section is handled below as the main section
         
-        // Display errors if any
+        // Display errors if any - tool specific
         if (data.errors && data.errors.length > 0) {
             logHtml += '<div class="mb-4 p-3 bg-red-900 border border-red-700 rounded">';
-            logHtml += '<div class="text-red-300 font-medium mb-2">❌ Errors</div>';
+            logHtml += `<div class="text-red-300 font-medium mb-2">❌ ${toolName.toUpperCase()} Errors</div>`;
             data.errors.forEach(error => {
                 logHtml += `<div class="text-sm text-red-400">• ${error}</div>`;
             });
             logHtml += '</div>';
         }
         
-        // Display warnings if any
+        // Display warnings if any - tool specific
         if (data.warnings && data.warnings.length > 0) {
             logHtml += '<div class="mb-4 p-3 bg-yellow-900 border border-yellow-700 rounded">';
-            logHtml += '<div class="text-yellow-300 font-medium mb-2">⚠️ Warnings</div>';
+            logHtml += `<div class="text-yellow-300 font-medium mb-2">⚠️ ${toolName.toUpperCase()} Warnings</div>`;
             data.warnings.forEach(warning => {
                 logHtml += `<div class="text-sm text-yellow-400">• ${warning}</div>`;
             });
             logHtml += '</div>';
         }
         
-        // Always show real-time container monitoring
+        // Main Real-time Container Monitoring section with enhanced details
         logHtml += '<div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded">';
-        logHtml += '<div class="text-blue-300 font-bold mb-2">🔄 Real-time Container Monitoring</div>';
+        logHtml += `<div class="text-blue-300 font-bold mb-2 flex items-center justify-between">`;
+        logHtml += `<span>🔄 ${toolName.toUpperCase()} Real-time Container Monitoring</span>`;
+        logHtml += `<span id="refresh-indicator-${toolName}" class="text-xs text-blue-400" style="display: none;">`;
+        logHtml += `<i class="fas fa-sync-alt fa-spin mr-1"></i>Updating...`;
+        logHtml += `</span>`;
+        logHtml += `</div>`;
         
         if (data.running_containers && data.running_containers.length > 0) {
-            data.running_containers.forEach(container => {
-                // Calculate running duration
-                const createdTime = new Date(container.created);
-                const now = new Date();
-                const duration = Math.floor((now - createdTime) / 1000);
-                const minutes = Math.floor(duration / 60);
-                const seconds = duration % 60;
-                const durationText = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-                
-                // Display container status in the specified format
-                logHtml += '<div class="text-sm text-blue-200 mb-2">';
-                logHtml += `<div class="font-semibold text-green-400">Live Status: RUNNING</div>`;
-                logHtml += `<div>Container: ${container.name}</div>`;
-                logHtml += `<div>ID: ${container.id}</div>`;
-                logHtml += `<div>Status: Up ${durationText}</div>`;
-                logHtml += `<div>Tool: ${container.tool_name || 'unknown'}</div>`;
-                logHtml += '</div>';
-            });
+            // Filter to only show containers for this specific tool
+            const toolSpecificContainers = data.running_containers.filter(container => 
+                container.tool_specific && container.tool_name === toolName
+            );
+            
+            if (toolSpecificContainers.length > 0) {
+                toolSpecificContainers.forEach(container => {
+                    // Calculate running duration
+                    const createdTime = new Date(container.created);
+                    const now = new Date();
+                    const duration = Math.floor((now - createdTime) / 1000);
+                    const minutes = Math.floor(duration / 60);
+                    const seconds = duration % 60;
+                    const durationText = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+                    
+                    // Enhanced container display with more details
+                    logHtml += '<div class="mb-3 p-3 bg-gray-800 border border-gray-600 rounded">';
+                    logHtml += `<div class="font-semibold text-green-400 mb-2">Live Status: RUNNING</div>`;
+                    logHtml += `<div class="text-sm text-blue-200 space-y-1">`;
+                    logHtml += `<div><span class="text-gray-400">Container:</span> ${container.name}</div>`;
+                    logHtml += `<div><span class="text-gray-400">ID:</span> ${container.id}</div>`;
+                    logHtml += `<div><span class="text-gray-400">Status:</span> Up ${durationText}</div>`;
+                    logHtml += `<div><span class="text-gray-400">Tool:</span> ${toolName.toUpperCase()}</div>`;
+                    if (container.image) {
+                        logHtml += `<div><span class="text-gray-400">Image:</span> ${container.image}</div>`;
+                    }
+                    logHtml += `</div>`;
+                    logHtml += '</div>';
+                });
+            } else {
+                logHtml += `<div class="text-yellow-400">No running containers found for ${toolName.toUpperCase()}.</div>`;
+            }
         } else {
-            logHtml += '<div class="text-yellow-400">No running containers found for this workflow.</div>';
+            logHtml += `<div class="text-yellow-400">No running containers found for ${toolName.toUpperCase()}.</div>`;
+            
+            // Show container info from execution if available
+            if (data.container_info && Object.keys(data.container_info).length > 0) {
+                logHtml += '<div class="mt-3 p-2 bg-gray-800 border border-gray-600 rounded">';
+                logHtml += '<div class="text-sm text-gray-300 mb-1">Last Container Execution:</div>';
+                if (data.container_info.status) {
+                    const statusColor = data.container_info.status === 'success' ? 'text-green-400' : 'text-red-400';
+                    logHtml += `<div class="text-xs ${statusColor}">Status: ${data.container_info.status}</div>`;
+                }
+                if (data.container_info.command) {
+                    logHtml += `<div class="text-xs text-cyan-400">Command: ${data.container_info.command}</div>`;
+                }
+                logHtml += '</div>';
+            }
         }
         
         logHtml += '</div>';
         
-        // Show existing orchestrator logs
+        // Show existing orchestrator logs - only tool-specific logs
         if (data.orchestrator_logs && data.orchestrator_logs.length > 0) {
-            data.orchestrator_logs.forEach(log => {
-                const timestamp = new Date(log.timestamp).toLocaleTimeString();
-                const levelColor = getLevelColor(log.level);
-                const typeIcon = getTypeIcon(log.type);
+            // Separate container output logs from orchestrator management logs
+            const toolSpecificLogs = data.orchestrator_logs.filter(log => log.tool_specific);
+            const containerLogs = toolSpecificLogs.filter(log => log.type === 'container_output');
+            const orchestratorLogs = toolSpecificLogs.filter(log => log.type !== 'container_output');
+            
+            // Show live container output first (most important)
+            if (containerLogs.length > 0) {
+                logHtml += '<div class="mb-3 p-3 bg-black border border-green-700 rounded">';
+                logHtml += `<div class="text-green-300 font-bold mb-2">🔴 LIVE: ${toolName.toUpperCase()} Container Output</div>`;
                 
-                logHtml += `<div class="mb-1 text-xs">
-                    <span class="text-gray-400">[${timestamp}]</span>
-                    <span class="text-blue-400">${typeIcon}</span>
-                    <span class="${levelColor}">${log.message}</span>
-                </div>`;
-            });
+                containerLogs.slice(-20).forEach(log => { // Show last 20 lines
+                    const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                    logHtml += `<div class="mb-1 text-xs">
+                        <span class="text-gray-500">[${timestamp}]</span>
+                        <span class="text-green-400">${log.message}</span>
+                    </div>`;
+                });
+                
+                logHtml += '</div>';
+            }
+            
+            // Show orchestrator management logs
+            if (orchestratorLogs.length > 0) {
+                logHtml += '<div class="mb-3 p-2 bg-gray-800 border border-gray-600 rounded">';
+                logHtml += `<div class="text-gray-300 font-medium mb-2">📋 ${toolName.toUpperCase()} Orchestrator Log Entries</div>`;
+                
+                orchestratorLogs.forEach(log => {
+                    // Fix timestamp parsing - replace comma with dot for milliseconds
+                    let timestamp = log.timestamp;
+                    try {
+                        if (timestamp.includes(',')) {
+                            // Convert format like "2025-09-17 07:09:30,858" to "2025-09-17 07:09:30.858"
+                            timestamp = timestamp.replace(',', '.');
+                        }
+                        timestamp = new Date(timestamp).toLocaleTimeString();
+                    } catch (e) {
+                        // Fallback to raw timestamp if parsing fails
+                        timestamp = log.timestamp;
+                    }
+                    
+                    const levelColor = getLevelColor(log.level);
+                    const typeIcon = getTypeIcon(log.type);
+                    
+                    logHtml += `<div class="mb-1 text-xs">
+                        <span class="text-gray-400">[${timestamp}]</span>
+                        <span class="text-blue-400">${typeIcon}</span>
+                        <span class="${levelColor}">${log.message}</span>
+                    </div>`;
+                });
+                
+                logHtml += '</div>';
+            }
         }
         
         // Note: Live monitoring is handled by the main live-logs-container element
-        if (!data.orchestrator_logs || data.orchestrator_logs.length === 0) {
-            logHtml += '<div class="text-gray-500">No orchestrator logs available for this tool</div>';
+        if (!data.orchestrator_logs || data.orchestrator_logs.filter(log => log.tool_specific).length === 0) {
+            logHtml += `<div class="text-center py-4"><div class="text-gray-500">No orchestrator logs available for ${toolName.toUpperCase()}</div><div class="text-xs text-gray-600 mt-1">Logs will appear here when the tool starts executing</div></div>`;
         }
-        
-        logHtml += '</div>';
         
         container.innerHTML = logHtml;
     }
     
-    function displayBasicToolLogs(container, logs) {
+    function displayBasicToolLogs(container, logs, toolName) {
         let logHtml = '';
-        logs.forEach(log => {
-            const timestamp = new Date(log.timestamp).toLocaleTimeString();
-            const levelColor = getLevelColor(log.level);
-            logHtml += `<div class="mb-1 text-xs">
-                <span class="text-gray-400">[${timestamp}]</span>
-                <span class="${levelColor}">${log.message}</span>
-            </div>`;
-        });
+        
+        // Simple header for basic logs
+        logHtml += '<div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded">';
+        logHtml += `<div class="text-blue-300 font-bold mb-2">🔄 ${toolName.toUpperCase()} Real-time Container Monitoring</div>`;
+        logHtml += `<div class="text-yellow-400">No running containers found for ${toolName.toUpperCase()}.</div>`;
+        logHtml += '</div>';
+        
+        // Show basic log entries if available
+        if (logs && logs.length > 0) {
+            logHtml += '<div class="mb-3 p-2 bg-gray-800 border border-gray-600 rounded">';
+            logHtml += `<div class="text-gray-300 font-medium mb-2">📋 ${toolName.toUpperCase()} Log Entries</div>`;
+            
+            logs.forEach(log => {
+                const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                const levelColor = getLevelColor(log.level);
+                logHtml += `<div class="mb-1 text-xs">
+                    <span class="text-gray-400">[${timestamp}]</span>
+                    <span class="${levelColor}">${log.message}</span>
+                </div>`;
+            });
+            logHtml += '</div>';
+        }
+        
         container.innerHTML = logHtml;
+    }
+    
+    function displayNoLogsMessage(container, toolName) {
+        container.innerHTML = `
+            <div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded">
+                <div class="text-blue-300 font-bold mb-2">🔄 ${toolName.toUpperCase()} Real-time Container Monitoring</div>
+                <div class="text-yellow-400">No running containers found for ${toolName.toUpperCase()}.</div>
+            </div>
+            
+            <div class="text-center py-6">
+                <div class="mb-4">
+                    <i class="fas fa-file-alt text-3xl text-gray-400"></i>
+                </div>
+                <div class="text-gray-600 mb-2">
+                    <h4 class="font-medium">No Logs Available</h4>
+                    <p class="text-sm">No orchestrator logs found for ${toolName.toUpperCase()}</p>
+                </div>
+                <div class="text-xs text-gray-500 mb-4">
+                    This could mean the tool hasn't started yet or is still initializing.
+                </div>
+                <button onclick="refreshToolLog('${toolName}', 'orchestrator', true)" 
+                        class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                    <i class="fas fa-refresh mr-1"></i>Retry
+                </button>
+            </div>
+        `;
+    }
+    
+    function displayErrorMessage(container, toolName, errorMsg) {
+        container.innerHTML = `
+            <div class="mb-3 p-3 bg-blue-900 border border-blue-700 rounded">
+                <div class="text-blue-300 font-bold mb-2">🔄 ${toolName.toUpperCase()} Real-time Container Monitoring</div>
+                <div class="text-yellow-400">No running containers found for ${toolName.toUpperCase()}.</div>
+            </div>
+            
+            <div class="text-center py-6">
+                <div class="mb-4">
+                    <i class="fas fa-exclamation-triangle text-3xl text-red-400"></i>
+                </div>
+                <div class="text-red-600 mb-4">
+                    <h4 class="font-medium">Error Loading Logs</h4>
+                    <p class="text-sm">${errorMsg} for ${toolName.toUpperCase()}</p>
+                </div>
+                <button onclick="refreshToolLog('${toolName}', 'orchestrator', true)" 
+                        class="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
+                    <i class="fas fa-refresh mr-1"></i>Retry
+                </button>
+            </div>
+        `;
     }
     
     function getLevelColor(level) {
@@ -1084,6 +1585,7 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'step_start': return '🚀';
             case 'step_completion': return '✅';
             case 'container': return '🐳';
+            case 'container_output': return '🔴';
             case 'progress': return '📊';
             case 'error': return '❌';
             case 'warning': return '⚠️';
@@ -1092,25 +1594,251 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Auto-refresh tool logs for running tools
+    // Auto-refresh tool logs for running tools (smart polling)
     function startToolLogPolling() {
         if (logPollingInterval) clearInterval(logPollingInterval);
         
         logPollingInterval = setInterval(() => {
-            // Refresh logs for all visible tool log containers
+            // Only refresh logs for visible tool log containers and only for running tools
             document.querySelectorAll('[id^="tool-log-"]').forEach(container => {
                 if (!container.classList.contains('hidden')) {
                     const toolName = container.id.replace('tool-log-', '');
-                    refreshToolLog(toolName);
+                    
+                    // Check if this tool is running (only poll running tools)
+                    const toolHeader = document.querySelector(`[onclick*="${toolName}"]`);
+                    const statusSpan = toolHeader ? toolHeader.closest('.bg-gray-50').querySelector('.rounded-full') : null;
+                    const isRunning = statusSpan && statusSpan.textContent.trim().toLowerCase() === 'running';
+                    
+                    // Only refresh if tool is running or we don't have cached data
+                    if (isRunning || !toolLogCache[toolName]) {
+                        refreshToolLog(toolName, 'orchestrator', false); // Non-forced refresh
+                    }
                 }
             });
-        }, 3000); // Refresh every 3 seconds
+            
+            // Update real-time container monitoring
+            updateContainerMonitoring();
+        }, 5000); // Refresh every 5 seconds (less aggressive)
+    }
+    
+    // Alias for backward compatibility
+    function startLogPolling() {
+        startToolLogPolling();
+    }
+    
+    // Real-time container monitoring
+    function updateContainerMonitoring() {
+        const monitoringSection = document.getElementById('container-monitoring-section');
+        if (!monitoringSection) {
+            console.error('Container monitoring section not found');
+            return;
+        }
+        
+        console.log('🔄 Updating container monitoring...');
+        
+        fetch(`/workflow/{{ workflow.id }}/container-status/`)
+            .then(response => {
+                console.log('📡 Container status response:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('📊 Container status data:', data);
+                if (data.success && data.containers && data.containers.length > 0) {
+                    console.log(`✅ Found ${data.containers.length} containers`);
+                    displayContainerStatus(monitoringSection, data.containers);
+                } else {
+                    console.log('ℹ️ No containers found');
+                    displayNoContainersMessage(monitoringSection);
+                }
+            })
+            .catch(error => {
+                console.error('❌ Error fetching container status:', error);
+                displayContainerError(monitoringSection);
+            });
+    }
+    
+    function displayContainerStatus(container, containers) {
+        if (!containers || containers.length === 0) {
+            displayNoContainersMessage(container);
+            return;
+        }
+        
+        let html = '';
+        containers.forEach(containerInfo => {
+            const statusColor = containerInfo.status === 'running' ? 'text-green-500' : 
+                               containerInfo.status === 'exited' ? 'text-yellow-500' : 'text-red-500';
+            const statusBgColor = containerInfo.status === 'running' ? 'bg-green-100' : 
+                                  containerInfo.status === 'exited' ? 'bg-yellow-100' : 'bg-red-100';
+            const liveStatus = containerInfo.status === 'running' ? 'RUNNING' : 
+                              containerInfo.status === 'exited' ? 'COMPLETED' : 'STOPPED';
+            
+            // Calculate runtime duration
+            let runtimeDisplay = 'N/A';
+            if (containerInfo.status_text) {
+                const match = containerInfo.status_text.match(/Up (\d+) (\w+)/);
+                if (match) {
+                    const value = match[1];
+                    const unit = match[2];
+                    runtimeDisplay = `${value} ${unit}`;
+                } else if (containerInfo.status_text.includes('Exited')) {
+                    runtimeDisplay = 'Completed';
+                }
+            }
+            
+            html += `
+                <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <!-- Container Header -->
+                    <div class="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 ${statusBgColor} rounded-full flex items-center justify-center">
+                                        ${containerInfo.status === 'running' ? 
+                                            '<i class="fas fa-play text-green-600"></i>' : 
+                                            containerInfo.status === 'exited' ? 
+                                            '<i class="fas fa-check text-yellow-600"></i>' : 
+                                            '<i class="fas fa-stop text-red-600"></i>'
+                                        }
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-900 capitalize">${containerInfo.tool_name || 'Unknown Tool'}</h5>
+                                    <p class="text-sm text-gray-500">Container Execution</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusBgColor} ${statusColor}">
+                                    <div class="w-2 h-2 ${containerInfo.status === 'running' ? 'bg-green-400 animate-pulse' : statusColor.replace('text-', 'bg-')} rounded-full mr-2"></div>
+                                    ${liveStatus}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Container Details -->
+                    <div class="px-6 py-4">
+                        <div class="grid grid-cols-2 gap-6">
+                            <!-- Left Column -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Container ID</span>
+                                    <span class="text-sm font-mono text-gray-900 bg-gray-100 px-2 py-1 rounded">${containerInfo.id ? containerInfo.id.substring(0, 12) : 'N/A'}</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Status</span>
+                                    <span class="text-sm font-medium ${statusColor}">${containerInfo.status || 'Unknown'}</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2">
+                                    <span class="text-sm font-medium text-gray-600">Tool</span>
+                                    <span class="text-sm font-semibold text-indigo-600 capitalize">${containerInfo.tool_name || 'Unknown'}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Right Column -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Runtime</span>
+                                    <span class="text-sm font-medium text-blue-600">
+                                        <i class="fas fa-clock mr-1"></i>${runtimeDisplay}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Image</span>
+                                    <span class="text-xs text-gray-500 font-mono">${containerInfo.image || 'N/A'}</span>
+                                </div>
+                                ${containerInfo.created ? `
+                                <div class="flex items-center justify-between py-2">
+                                    <span class="text-sm font-medium text-gray-600">Started</span>
+                                    <span class="text-xs text-gray-500">${new Date(containerInfo.created).toLocaleTimeString()}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Container Name (Full Width) -->
+                        <div class="mt-4 pt-3 border-t border-gray-100">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Container Name</span>
+                                <button onclick="copyToClipboard('${containerInfo.name}')" class="text-xs text-blue-500 hover:text-blue-700">
+                                    <i class="fas fa-copy mr-1"></i>Copy
+                                </button>
+                            </div>
+                            <p class="text-xs font-mono text-gray-700 bg-gray-50 px-3 py-2 rounded mt-1 break-all">${containerInfo.name || 'N/A'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    function displayNoContainersMessage(container) {
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200 rounded-xl p-8 text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                    <i class="fas fa-container-storage text-gray-400 text-xl"></i>
+                </div>
+                <h5 class="text-lg font-medium text-gray-700 mb-2">No Active Containers</h5>
+                <p class="text-sm text-gray-500 mb-1">No containers are currently running for this workflow</p>
+                <p class="text-xs text-gray-400">
+                    <i class="fas fa-info-circle mr-1"></i>Containers will appear here when workflow steps are executing
+                </p>
+            </div>
+        `;
+    }
+    
+    function displayContainerError(container) {
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl p-6 text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-3">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-lg"></i>
+                </div>
+                <h5 class="text-lg font-medium text-red-700 mb-1">Error Loading Container Status</h5>
+                <p class="text-sm text-red-600">Unable to fetch real-time container information</p>
+            </div>
+        `;
+    }
+    
+    // Utility function for copying text to clipboard
+    function copyToClipboard(text) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show success feedback
+                const button = event.target.closest('button');
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check mr-1"></i>Copied!';
+                button.classList.add('text-green-500');
+                
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('text-green-500');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        }
     }
     
     // Start tool log polling if workflow is running
     if ('{{ workflow.status }}' === 'running') {
         startToolLogPolling();
     }
+    
+    // Start container monitoring on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        updateContainerMonitoring();
+        // Update every 5 seconds
+        setInterval(updateContainerMonitoring, 5000);
+    });
     
     // Issues Log Functions
     function refreshIssuesLog() {
@@ -1552,6 +2280,166 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    function displayContainerStatus(container, containers) {
+        if (!containers || containers.length === 0) {
+            displayNoContainersMessage(container);
+            return;
+        }
+        
+        let html = '';
+        containers.forEach(containerInfo => {
+            const statusColor = containerInfo.status === 'running' ? 'text-green-500' : 
+                               containerInfo.status === 'exited' ? 'text-yellow-500' : 'text-red-500';
+            const statusBgColor = containerInfo.status === 'running' ? 'bg-green-100' : 
+                                  containerInfo.status === 'exited' ? 'bg-yellow-100' : 'bg-red-100';
+            const liveStatus = containerInfo.status === 'running' ? 'RUNNING' : 
+                              containerInfo.status === 'exited' ? 'COMPLETED' : 'STOPPED';
+            
+            // Calculate runtime duration
+            let runtimeDisplay = 'N/A';
+            if (containerInfo.status_text) {
+                const match = containerInfo.status_text.match(/Up (\d+) (\w+)/);
+                if (match) {
+                    const value = match[1];
+                    const unit = match[2];
+                    runtimeDisplay = `${value} ${unit}`;
+                } else if (containerInfo.status_text.includes('Exited')) {
+                    runtimeDisplay = 'Completed';
+                }
+            }
+            
+            html += `
+                <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <!-- Container Header -->
+                    <div class="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 ${statusBgColor} rounded-full flex items-center justify-center">
+                                        ${containerInfo.status === 'running' ? 
+                                            '<i class="fas fa-play text-green-600"></i>' : 
+                                            containerInfo.status === 'exited' ? 
+                                            '<i class="fas fa-check text-yellow-600"></i>' : 
+                                            '<i class="fas fa-stop text-red-600"></i>'
+                                        }
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-900 capitalize">${containerInfo.tool_name || 'Unknown Tool'}</h5>
+                                    <p class="text-sm text-gray-500">Container Execution</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusBgColor} ${statusColor}">
+                                    <div class="w-2 h-2 ${containerInfo.status === 'running' ? 'bg-green-400 animate-pulse' : statusColor.replace('text-', 'bg-')} rounded-full mr-2"></div>
+                                    ${liveStatus}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Container Details -->
+                    <div class="px-6 py-4">
+                        <div class="grid grid-cols-2 gap-6">
+                            <!-- Left Column -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Container ID</span>
+                                    <span class="text-sm font-mono text-gray-900 bg-gray-100 px-2 py-1 rounded">${containerInfo.id ? containerInfo.id.substring(0, 12) : 'N/A'}</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Status</span>
+                                    <span class="text-sm font-medium ${statusColor}">${containerInfo.status || 'Unknown'}</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2">
+                                    <span class="text-sm font-medium text-gray-600">Tool</span>
+                                    <span class="text-sm font-semibold text-indigo-600 capitalize">${containerInfo.tool_name || 'Unknown'}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Right Column -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Runtime</span>
+                                    <span class="text-sm font-medium text-blue-600">
+                                        <i class="fas fa-clock mr-1"></i>${runtimeDisplay}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                                    <span class="text-sm font-medium text-gray-600">Image</span>
+                                    <span class="text-xs text-gray-500 font-mono">${containerInfo.image || 'N/A'}</span>
+                                </div>
+                                ${containerInfo.created ? `
+                                <div class="flex items-center justify-between py-2">
+                                    <span class="text-sm font-medium text-gray-600">Started</span>
+                                    <span class="text-xs text-gray-500">${new Date(containerInfo.created).toLocaleTimeString()}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Container Name (Full Width) -->
+                        <div class="mt-4 pt-3 border-t border-gray-100">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Container Name</span>
+                                <button onclick="copyToClipboard('${containerInfo.name}')" class="text-xs text-blue-500 hover:text-blue-700">
+                                    <i class="fas fa-copy mr-1"></i>Copy
+                                </button>
+                            </div>
+                            <p class="text-xs font-mono text-gray-700 bg-gray-50 px-3 py-2 rounded mt-1 break-all">${containerInfo.name || 'N/A'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    function displayNoContainersMessage(container) {
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-xl p-8 shadow-sm">
+                <div class="text-center">
+                    <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                        <i class="fas fa-container-storage text-gray-400 text-2xl"></i>
+                    </div>
+                    <h4 class="text-lg font-medium text-gray-700 mb-2">No Active Containers</h4>
+                    <p class="text-sm text-gray-500 mb-4">No containers are currently running for this workflow.</p>
+                    <div class="text-xs text-gray-400">
+                        This is normal when:
+                        <ul class="list-disc list-inside mt-2 space-y-1">
+                            <li>Workflow has completed</li>
+                            <li>Workflow hasn't started yet</li>
+                            <li>Between tool execution steps</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function displayContainerError(container) {
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-red-50 to-red-100 border border-red-200 rounded-xl p-6 shadow-sm">
+                <div class="text-center">
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-3">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-lg"></i>
+                    </div>
+                    <p class="text-red-600 font-medium">Failed to load container status</p>
+                    <p class="text-xs text-red-500 mt-1">Please refresh the page or check the console for errors</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            console.log('📋 Copied to clipboard:', text);
+        }).catch(err => {
+            console.error('❌ Failed to copy:', err);
+        });
+    }
+    
     // Auto-load enhanced issues analysis when page loads
     document.addEventListener('DOMContentLoaded', function() {
         refreshIssuesAnalysis();
@@ -1566,6 +2454,43 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('beforeunload', function() {
         stopLiveLogs();
     });
+    
+    // Add monitoring phase indicator to container status
+    function getMonitoringPhaseInfo(containerInfo, runtimeDisplay) {
+        if (containerInfo.status !== 'running') {
+            return {
+                phase: 'Complete',
+                icon: 'fas fa-check-circle',
+                color: 'text-gray-500',
+                description: 'Monitoring finished'
+            };
+        }
+        
+        // Determine phase based on runtime
+        const isLongRunning = runtimeDisplay.includes('minute') || runtimeDisplay.includes('hour');
+        
+        if (isLongRunning) {
+            return {
+                phase: 'Phase 2: Container-based',
+                icon: 'fas fa-sync-alt',
+                color: 'text-emerald-600',
+                description: 'Using docker logs polling for long-running tool'
+            };
+        } else {
+            return {
+                phase: 'Phase 1: Real-time',
+                icon: 'fas fa-bolt',
+                color: 'text-blue-600',
+                description: 'Non-blocking I/O monitoring'
+            };
+        }
+    }
+    
+    // Log monitoring system info on page load
+    console.log('🔧 BioFrame Hybrid Monitoring System Active');
+    console.log('⚡ Phase 1: Real-time monitoring (0-3 seconds)');
+    console.log('🔄 Phase 2: Container-based monitoring (long-running tools)');
+    console.log('✅ No more stuck orchestrator - robust monitoring enabled!');
 </script>
 {% endblock %}
 

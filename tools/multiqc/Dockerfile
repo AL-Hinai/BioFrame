@@ -13,7 +13,12 @@ FROM ubuntu:22.04
 # tool_color: indigo
 # tool_commands: multiqc
 # tool_primary_command: multiqc
-# tool_command_template: multiqc {input_dir} -o {output_dir} {options}
+# tool_command_template: multiqc /data -o {output_dir} --force
+# tool_memory_requirement: 2g
+# tool_cpu_requirement: 1
+# tool_expected_outputs: {output_dir}/multiqc_report.html
+# tool_success_indicators: MultiQC complete,Report written
+# tool_failure_indicators: ERROR,CRITICAL,Failed
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

@@ -23,6 +23,7 @@ This **Master's thesis project** addresses the fundamental challenges in bioinfo
 - **🐳 Containerized Bioinformatics**: Creating reproducible analysis environments for genomic studies
 - **💻 User Experience**: Transforming complex command-line operations into intuitive web interfaces for biologists
 - **⚠️ Error Handling**: Implementing advanced logging and recovery mechanisms for robust biological data analysis
+- **🤖 Dynamic Architecture**: Revolutionary zero-configuration tool integration system
 
 ### **🎓 Academic Significance - Biological Science Integration:**
 BioFrame represents a significant contribution to the field of bioinformatics, combining:
@@ -30,6 +31,29 @@ BioFrame represents a significant contribution to the field of bioinformatics, c
 - **💻 Computer Science**: Modern software development and DevOps practices for biological applications
 - **🎨 User Experience Design**: Creating accessible interfaces for biological researchers
 - **🏗️ System Architecture**: Scalable and maintainable bioinformatics platforms for biological research
+- **🤖 Innovation in Automation**: Breakthrough dynamic tool integration without manual configuration
+
+### **🏆 Key Research Contributions:**
+
+#### **1. Dynamic Tool Discovery Algorithm**
+- **Problem Solved**: Manual tool integration requiring code changes
+- **Solution**: Automatic Docker image scanning and metadata extraction
+- **Impact**: Zero-configuration tool addition process
+
+#### **2. Metadata-Driven Command Generation**
+- **Problem Solved**: Hardcoded tool commands limiting flexibility
+- **Solution**: Template-based command construction from embedded metadata
+- **Impact**: Self-describing tools with automatic command generation
+
+#### **3. Resource-Aware Container Orchestration**
+- **Problem Solved**: Fixed resource allocation regardless of tool requirements
+- **Solution**: Per-tool resource specification in metadata
+- **Impact**: Optimal resource utilization and better performance
+
+#### **4. Intelligent Error Detection and Recovery**
+- **Problem Solved**: Generic error handling without tool-specific knowledge
+- **Solution**: Tool-defined success/failure indicators in metadata
+- **Impact**: Precise error diagnosis and targeted recovery suggestions
 
 ---
 
@@ -66,21 +90,23 @@ portal/
 - **File Management**: Input/output file handling and visualization
 - **API Endpoints**: RESTful API for workflow operations
 
-### **Workflow Orchestrator Layer**
+### **Dynamic Workflow Orchestrator Layer**
 ```
 workflow-orchestrator/
-├── orchestrator.py   # Core pipeline execution engine
+├── orchestrator.py   # 🤖 FULLY DYNAMIC pipeline execution engine
 ├── logging_utils.py  # Advanced logging and error analysis
 └── requirements.txt  # Orchestrator dependencies
 ```
 
-**Key Features:**
-- **Pipeline Execution**: Sequential tool execution with dependency management
-- **Error Handling**: Comprehensive error detection and recovery
-- **Resource Management**: Docker container orchestration and resource allocation
-- **Progress Tracking**: Real-time workflow progress monitoring
+**🚀 Revolutionary Dynamic Features:**
+- **🔍 Automatic Tool Discovery**: Scans Docker images to find all available tools
+- **📋 Metadata-Driven Execution**: Extracts tool configurations from Dockerfiles
+- **🎯 Zero Configuration**: No hardcoded tool lists or commands
+- **🔧 Template-Based Commands**: Dynamic command generation from metadata
+- **📊 Resource-Aware**: Memory and CPU allocation based on tool requirements
+- **🔄 Self-Scaling**: Automatically supports new tools without code changes
 
-### **Tool Containerization Layer**
+### **Dynamic Tool Containerization Layer**
 ```
 tools/
 ├── fastqc/          # Quality control for sequencing data
@@ -92,14 +118,282 @@ tools/
 ├── samtools/        # SAM/BAM file manipulation
 ├── gatk/            # Variant calling and analysis
 ├── bedtools/        # Genome arithmetic operations
-└── pilon/           # Assembly improvement
+├── pilon/           # Assembly improvement
+├── astral/          # Species tree reconstruction
+├── mafft/           # Multiple sequence alignment
+├── iqtree/          # Phylogenetic tree inference
+├── raxml/           # Maximum likelihood phylogenetics
+├── seqtk/           # Sequence processing toolkit
+├── hybpiper/        # Phylogenomics pipeline
+├── exonerate/       # Sequence alignment tool
+├── paftools/        # Pairwise alignment format tools
+├── fasttree/        # Fast phylogenetic trees
+└── ... (20+ tools)  # Automatically discovered tools
 ```
 
-**Key Features:**
-- **Docker Containers**: Isolated, reproducible tool environments
-- **Version Control**: Specific tool versions for reproducibility
-- **Resource Optimization**: Memory and CPU allocation per tool
-- **Input/Output Standardization**: Consistent file format handling
+**🎯 Dynamic Tool Features:**
+- **📋 Embedded Metadata**: Each tool contains complete configuration metadata
+- **🔧 Self-Describing**: Tools define their own execution parameters
+- **🎨 UI Integration**: Automatic web interface generation from metadata
+- **📊 Resource Management**: Individual memory and CPU requirements
+- **✅ Validation Rules**: Success/failure detection patterns
+- **🔄 Template Commands**: Flexible command construction templates
+
+## 🤖 Dynamic Tool Integration System
+
+### **🚀 Revolutionary Zero-Configuration Architecture**
+
+BioFrame features a **completely dynamic tool integration system** that automatically discovers and integrates new bioinformatics tools without requiring any code modifications to the orchestrator or portal. This breakthrough architecture makes BioFrame infinitely extensible.
+
+### **🔍 How Dynamic Discovery Works**
+
+#### **1. Automatic Tool Scanning**
+```python
+# The orchestrator automatically scans for tools
+def _get_supported_tools(self) -> List[str]:
+    """Dynamically discover all available tools from Docker images"""
+    # Scans for all bioframe-* Docker images
+    # Extracts tool names automatically
+    # Returns complete list of available tools
+```
+
+**Current Discovery Results:**
+- **20+ tools automatically detected**: fastqc, trimmomatic, spades, quast, multiqc, bwa, samtools, bedtools, gatk, pilon, astral, mafft, iqtree, raxml, seqtk, hybpiper, exonerate, paftools, fasttree, and more
+- **Zero hardcoded lists**: All tools discovered dynamically
+- **Automatic updates**: New tools appear instantly when Docker images are built
+
+#### **2. Metadata-Driven Execution**
+```python
+# Orchestrator extracts metadata from Dockerfiles
+def _extract_tool_metadata(self, tool_name: str) -> Dict[str, str]:
+    """Extract metadata from tool's Dockerfile directly"""
+    # Reads Dockerfile from tools/{tool_name}/Dockerfile
+    # Parses BIOFRAME_TOOL_METADATA section
+    # Returns complete tool configuration
+```
+
+#### **3. Dynamic Command Generation**
+```python
+# Commands built from templates automatically
+def _build_command_from_template(self, tool_name: str, metadata: Dict[str, str], ...):
+    """Build command dynamically from metadata template"""
+    # Uses tool_command_template from metadata
+    # Substitutes placeholders with actual values
+    # Handles complex shell commands automatically
+```
+
+### **📋 Complete Metadata Specification**
+
+Every tool Dockerfile **MUST** include this metadata block:
+
+```dockerfile
+# BIOFRAME_TOOL_METADATA
+# tool_name: ToolName                    # Display name for UI
+# tool_description: Tool description     # Description for users
+# tool_version: 1.0.0                   # Tool version
+# tool_category: Category Name          # Category for organization
+# tool_input_formats: FORMAT1, FORMAT2  # Supported input formats
+# tool_output_formats: FORMAT1, FORMAT2 # Generated output formats
+# tool_author: Author Name              # Tool author/maintainer
+# tool_url: https://tool.website.com    # Official tool website
+# tool_icon: icon-name                  # FontAwesome icon name
+# tool_color: color-name                # UI color theme
+# tool_commands: cmd1,cmd2,cmd3         # Available commands
+# tool_primary_command: primary_cmd     # Main executable command
+# tool_command_template: cmd {args}     # 🔧 EXECUTION TEMPLATE
+# tool_memory_requirement: 4g           # Memory requirement
+# tool_cpu_requirement: 2               # CPU cores required
+# tool_expected_outputs: file1,file2    # Expected output files
+# tool_success_indicators: success_msg  # Success detection patterns
+# tool_failure_indicators: error_msg    # Failure detection patterns
+```
+
+### **🔧 Command Template System**
+
+The `tool_command_template` is the heart of the dynamic system. It uses placeholders that are automatically substituted:
+
+#### **Available Placeholders:**
+- `{input_files}` - All input files as space-separated list
+- `{input_file_1}`, `{input_file_2}`, etc. - Individual input files
+- `{output_dir}` - Tool-specific output directory
+- `{read1}`, `{read2}` - Common aliases for paired-end reads
+- `{reference}` - Reference genome (typically first input)
+- `{assembly_files}` - Assembly files for analysis
+- `{threads}` - Number of CPU threads (default: 4)
+- `{memory}` - Memory allocation (default: 8)
+
+#### **Example Templates:**
+```dockerfile
+# Simple tool
+# tool_command_template: mytool {input_files} -o {output_dir}
+
+# Paired-end tool
+# tool_command_template: mytool -1 {input_file_1} -2 {input_file_2} -o {output_dir}
+
+# Complex shell command
+# tool_command_template: mytool process {input_file_1} | filter > {output_dir}/result.txt
+
+# Multi-step command
+# tool_command_template: mkdir -p {output_dir} && mytool {input_files} -o {output_dir} --threads {threads}
+```
+
+### **🛠️ How to Add New Tools**
+
+#### **Step 1: Create Tool Directory**
+```bash
+mkdir tools/mytool
+cd tools/mytool
+```
+
+#### **Step 2: Create Dockerfile with Complete Metadata**
+```dockerfile
+FROM ubuntu:22.04
+
+# BIOFRAME_TOOL_METADATA
+# tool_name: MyTool
+# tool_description: Description of what this tool does
+# tool_version: 1.0.0
+# tool_category: Analysis Type (e.g., Quality Control, Assembly, Alignment)
+# tool_input_formats: FASTQ, FASTA
+# tool_output_formats: BAM, VCF
+# tool_author: Tool Author
+# tool_url: https://tool-website.com
+# tool_icon: dna
+# tool_color: blue
+# tool_commands: mytool,subtool1,subtool2
+# tool_primary_command: mytool
+# tool_command_template: mytool {input_files} -o {output_dir} --threads {threads}
+# tool_memory_requirement: 4g
+# tool_cpu_requirement: 2
+# tool_expected_outputs: {output_dir}/result.txt,{output_dir}/summary.log
+# tool_success_indicators: Process completed successfully,Analysis finished
+# tool_failure_indicators: ERROR,FATAL,Failed to process
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install your tool
+RUN wget https://tool-download-url/mytool.tar.gz \
+    && tar -xzf mytool.tar.gz \
+    && cp mytool /usr/local/bin/ \
+    && chmod +x /usr/local/bin/mytool
+
+# Create working directories
+RUN mkdir -p /data /logs /output
+
+# Set working directory
+WORKDIR /data
+
+# Default command
+CMD ["mytool", "--help"]
+```
+
+#### **Step 3: Build the Docker Image**
+```bash
+# Build with standard naming convention
+docker build -t bioframe-mytool:latest .
+```
+
+#### **Step 4: Test the Tool**
+```bash
+# Test tool execution
+docker run --rm bioframe-mytool:latest mytool --help
+
+# Test with BioFrame
+# The tool will automatically appear in the web interface!
+```
+
+### **🎯 Automatic Integration Process**
+
+Once you build the Docker image, BioFrame automatically:
+
+#### **1. Orchestrator Integration** 🤖
+- **Discovers** the new tool by scanning Docker images
+- **Extracts** metadata from the Dockerfile
+- **Generates** appropriate execution commands
+- **Allocates** resources based on requirements
+- **Validates** outputs using success/failure indicators
+
+#### **2. Portal Integration** 🌐
+- **Lists** the tool in available tools
+- **Displays** tool information from metadata
+- **Creates** workflow options automatically
+- **Shows** proper icons and colors
+- **Handles** input/output format validation
+
+#### **3. UI Generation** 🎨
+The portal automatically creates:
+- **Tool selection interface** with icons and descriptions
+- **Input format validation** based on `tool_input_formats`
+- **Resource requirement display** from metadata
+- **Category organization** using `tool_category`
+- **Help links** using `tool_url`
+
+### **📊 Metadata Impact on System Components**
+
+#### **For Orchestrator (orchestrator.py):**
+```python
+# Used for:
+tool_primary_command     # → Main executable
+tool_command_template    # → Command construction
+tool_memory_requirement  # → Docker memory limits
+tool_cpu_requirement     # → Docker CPU limits
+tool_expected_outputs    # → Output validation
+tool_success_indicators  # → Success detection
+tool_failure_indicators  # → Failure detection
+```
+
+#### **For Portal (views.py & templates):**
+```python
+# Used for:
+tool_name               # → Display name
+tool_description        # → Tool descriptions
+tool_category           # → Organization/grouping
+tool_input_formats      # → File validation
+tool_output_formats     # → Expected results
+tool_icon               # → UI icons
+tool_color              # → UI theming
+tool_url                # → Help links
+```
+
+### **🔧 Advanced Template Examples**
+
+#### **Quality Control Tool:**
+```dockerfile
+# tool_command_template: mkdir -p {output_dir} && fastqc {input_files} -o {output_dir} --noextract
+```
+
+#### **Assembly Tool:**
+```dockerfile
+# tool_command_template: spades.py --careful --only-assembler --threads {threads} --memory {memory} -1 {input_file_1} -2 {input_file_2} -o {output_dir}
+```
+
+#### **Alignment Tool:**
+```dockerfile
+# tool_command_template: bwa mem -t {threads} {input_file_1} {input_file_2} > {output_dir}/alignment.sam
+```
+
+#### **Complex Multi-Step Tool:**
+```dockerfile
+# tool_command_template: cd {output_dir} && mytool preprocess {input_file_1} && mytool analyze processed.data && mytool report analysis.result
+```
+
+### **✅ Validation and Quality Assurance**
+
+#### **Automatic Validation:**
+- **Input Format Checking**: Validates input files match `tool_input_formats`
+- **Resource Validation**: Ensures adequate memory/CPU available
+- **Output Detection**: Monitors for `tool_expected_outputs`
+- **Success/Failure Detection**: Uses `tool_success_indicators` and `tool_failure_indicators`
+
+#### **Error Recovery:**
+- **Detailed Error Logs**: Captures all tool output and errors
+- **Rerun Capabilities**: Allows restarting from failed steps
+- **Resource Adjustment**: Suggests resource modifications for failures
+- **Alternative Approaches**: Recommends different tools or parameters
 
 ## 🔄 Pipeline Process Architecture
 
@@ -185,17 +479,11 @@ services:
     networks:
       - bioframe-network
 
-  # Bioinformatics tools (individual containers)
-  fastqc:
-    build: ./tools/fastqc
-    volumes:
-      - ./data:/data
-      - ./logs:/logs
-    networks:
-      - bioframe-network
-
-  # Additional tools: Trimmomatic, SPAdes, QUAST, BWA, SAMtools, BEDtools, MultiQC, GATK, Pilon
-  # Each tool has its own container with specific resource allocation
+  # 🤖 DYNAMIC BIOINFORMATICS TOOLS
+  # Tools are built independently and discovered automatically
+  # No docker-compose configuration needed for tools!
+  # Just build: docker build -t bioframe-{toolname}:latest tools/{toolname}/
+  # The orchestrator automatically discovers and integrates all bioframe-* images
 ```
 
 **Deployment Benefits:**
@@ -308,6 +596,22 @@ Error Detection → Analysis → Recovery Options → User Notification
 
 ## 💡 Innovation & Bioinformatics Improvement
 
+### **🔄 Dynamic vs. Static Tool Integration**
+
+#### **Traditional Static Approach:**
+```
+Add Tool → Modify Code → Update Configs → Test → Deploy → Repeat for Each Tool
+    ↓         ↓           ↓             ↓      ↓        ↓
+Manual Work  Code Changes  Configuration  Testing  Deployment  Maintenance
+```
+
+#### **🚀 BioFrame Dynamic Approach:**
+```
+Create Dockerfile → Build Image → Automatic Discovery → Instant Integration → Ready to Use
+       ↓              ↓              ↓                  ↓                 ↓
+   Metadata Only   Docker Build   Orchestrator Scan   Portal Update   Zero Config
+```
+
 ### **Traditional vs. BioFrame Approach**
 
 #### **Traditional Bioinformatics:**
@@ -317,71 +621,66 @@ Command Line → Manual Execution → Limited Monitoring → Error Debugging →
 Complex Commands  Sequential Steps  No Visibility   Trial & Error  Time Loss
 ```
 
-#### **BioFrame Approach:**
+#### **BioFrame Dynamic Approach:**
 ```
-Web Interface → Automated Execution → Real-time Monitoring → Intelligent Analysis → Success
-      ↓              ↓                ↓              ↓           ↓
-User-Friendly    Parallel Processing  Full Visibility   Smart Recovery   Efficiency
+Web Interface → Metadata-Driven Execution → Real-time Monitoring → Intelligent Analysis → Success
+      ↓              ↓                        ↓                   ↓                    ↓
+User-Friendly    Template-Based Commands    Full Visibility      Smart Recovery      Efficiency
 ```
 
-### **Key Improvements**
+### **🎯 Dynamic System Technical Benefits**
 
-#### **1. Accessibility**
-- **Web-Based Interface**: No command-line expertise required
-- **Visual Workflows**: Intuitive pipeline design and management
-- **User Management**: Multi-user support with role-based access
+#### **1. Maintainability Revolution**
+- **📝 Single Source of Truth**: All tool information in Dockerfiles
+- **🔧 No Hardcoded Logic**: Zero tool-specific code in orchestrator
+- **🔄 Automatic Updates**: Tools update without system changes
+- **📊 Consistent Patterns**: Standard metadata across all tools
 
-#### **2. Reproducibility**
-- **Containerized Tools**: Identical environments across systems
-- **Version Control**: Specific tool versions for consistent results
-- **Workflow Templates**: Reusable pipeline configurations
+#### **2. Scalability Breakthrough**
+- **∞ Unlimited Tools**: Add as many tools as needed
+- **🚀 Instant Availability**: New tools immediately usable
+- **📦 Independent Deployment**: Tools deployed separately
+- **🔧 Resource Optimization**: Per-tool resource allocation
 
-#### **3. Monitoring & Debugging**
-- **Real-Time Visibility**: Live execution monitoring
-- **Advanced Logging**: Comprehensive error tracking and analysis
-- **Intelligent Recovery**: Automated error diagnosis and recovery suggestions
+#### **3. Development Efficiency**
+- **⚡ Rapid Integration**: Minutes instead of hours to add tools
+- **🧪 Easy Testing**: Standard Docker testing patterns
+- **📝 Self-Documentation**: Metadata serves as documentation
+- **🔄 Version Control**: Independent tool versioning
 
-#### **4. Scalability**
-- **Resource Management**: Efficient CPU and memory allocation
-- **Parallel Processing**: Concurrent workflow execution
-- **Load Balancing**: Distributed processing capabilities
-
-#### **5. Collaboration**
-- **Shared Workflows**: Team workflow sharing and collaboration
-- **Result Sharing**: Easy sharing of analysis results
-- **Knowledge Management**: Centralized workflow documentation
 
 ## 🔮 Future Enhancements & Roadmap
 
 ### **Short-Term Goals (3-6 months)**
-- **Cloud Integration**: AWS, Azure, and Google Cloud support
-- **Advanced Scheduling**: Cron-based workflow automation
-- **Enhanced UI**: Modern React-based frontend
-- **API Expansion**: Comprehensive REST API for integrations
+- **🤖 Enhanced Dynamic Features**: Advanced metadata validation and auto-optimization
+- **☁️ Cloud Integration**: AWS, Azure, and Google Cloud support
+- **📅 Advanced Scheduling**: Cron-based workflow automation
+- **🎨 Enhanced UI**: Modern React-based frontend with dynamic tool interfaces
 
 ### **Medium-Term Goals (6-12 months)**
-- **Machine Learning**: Intelligent pipeline optimization
-- **Distributed Computing**: Multi-node workflow execution
-- **Advanced Analytics**: Statistical analysis and visualization
-- **Plugin System**: Third-party tool integration framework
+- **🧠 AI-Enhanced Metadata**: Machine learning for optimal tool parameter suggestion
+- **🌐 Distributed Computing**: Multi-node workflow execution with dynamic load balancing
+- **📊 Advanced Analytics**: Statistical analysis and visualization of tool performance
+- **🔗 Community Tool Hub**: Shared repository of community-contributed tools
 
 ### **Long-Term Vision (1+ years)**
-- **AI-Powered Pipelines**: Automated pipeline design and optimization
-- **Federated Computing**: Multi-institution collaboration platform
-- **Real-Time Genomics**: Streaming data analysis capabilities
-- **Industry Integration**: Commercial bioinformatics platform
+- **🤖 AI-Powered Pipeline Design**: Automated workflow creation from research objectives
+- **🌍 Federated Computing**: Multi-institution collaboration with shared dynamic tools
+- **⚡ Real-Time Genomics**: Streaming data analysis with auto-scaling tool containers
+- **🏭 Industry Platform**: Commercial bioinformatics platform with enterprise tool marketplace
 
 ## 🛠️ Development & Contribution
 
 ### **🐳 Docker Architecture**
 BioFrame is built as a **fully containerized application** using Docker and Docker Compose for consistent development and deployment environments.
 
-**Container Structure:**
+**🤖 Dynamic Container Structure:**
 - **Portal Container**: Django web application with user interface (port 8000)
 - **PostgreSQL Database**: Data storage for workflows and results (port 5432)
 - **Redis**: Task queue and caching system (port 6380)
-- **Bioinformatics Tools**: Individual containers for each tool (FastQC, Trimmomatic, SPAdes, QUAST, BWA, SAMtools, BEDtools, MultiQC, GATK, Pilon)
-- **Workflow Orchestrator**: Pipeline execution and management
+- **🔍 Dynamic Tool Discovery**: 20+ automatically discovered bioinformatics tools
+- **🤖 Workflow Orchestrator**: Metadata-driven pipeline execution and management
+- **📊 Resource-Aware Tools**: Per-tool memory and CPU allocation from metadata
 - **Data Volumes**: Persistent storage for workflows, data, and logs
 
 **Benefits of Docker Architecture:**
@@ -390,7 +689,7 @@ BioFrame is built as a **fully containerized application** using Docker and Dock
 - **Easy Deployment**: Simple `./start.sh` script to start the entire system
 - **Scalability**: Easy to scale individual services as needed
 - **Reproducibility**: Exact environment replication for research workflows
-- **Tool Isolation**: Each bioinformatics tool runs in its own container with specific resource allocation
+- **🤖 Dynamic Tool Integration**: Automatic tool discovery and metadata-driven execution
 
 ### **Development Setup (Docker-Based Project)**
 ```bash
@@ -433,13 +732,116 @@ docker-compose logs -f
 ./test_containers.sh
 ```
 
+### **🎉 Benefits of Dynamic Architecture**
+
+#### **For Developers:**
+- **🚀 Zero Code Changes**: Add tools without touching orchestrator.py or portal code
+- **⚡ Instant Integration**: New tools appear immediately in web interface
+- **🔧 Consistent Patterns**: Standard metadata format for all tools
+- **🧪 Easy Testing**: Simple Docker build and test process
+- **📝 Self-Documenting**: Metadata serves as tool documentation
+
+#### **For Researchers:**
+- **🔍 Tool Discovery**: Automatically see all available tools
+- **📊 Resource Planning**: See memory/CPU requirements upfront
+- **✅ Format Validation**: Input/output format checking
+- **🎨 Intuitive Interface**: Consistent UI across all tools
+- **🔗 Help Integration**: Direct links to tool documentation
+
+#### **For System Administrators:**
+- **📦 Easy Deployment**: Just build Docker images
+- **🔄 Version Management**: Update tools independently
+- **📊 Resource Control**: Per-tool resource allocation
+- **🛠️ Maintenance**: No code updates for new tools
+- **📈 Scalability**: Add unlimited tools
+
+### **🌟 Real-World Examples**
+
+#### **Example 1: Adding a New Phylogenetic Tool**
+```bash
+# 1. Create tool directory
+mkdir tools/mrbayes
+cd tools/mrbayes
+
+# 2. Create Dockerfile with metadata
+cat > Dockerfile << 'EOF'
+FROM ubuntu:22.04
+
+# BIOFRAME_TOOL_METADATA
+# tool_name: MrBayes
+# tool_description: Bayesian phylogenetic inference using MCMC
+# tool_version: 3.2.7
+# tool_category: Phylogenetic Analysis
+# tool_input_formats: NEXUS, FASTA
+# tool_output_formats: NEWICK, LOG
+# tool_author: John Huelsenbeck
+# tool_url: https://github.com/NBISweden/MrBayes
+# tool_icon: tree
+# tool_color: green
+# tool_commands: mb
+# tool_primary_command: mb
+# tool_command_template: mb -i {input_file_1} -o {output_dir}/mrbayes_output
+# tool_memory_requirement: 8g
+# tool_cpu_requirement: 4
+# tool_expected_outputs: {output_dir}/mrbayes_output.tre
+# tool_success_indicators: Analysis completed,Final standard deviation
+# tool_failure_indicators: ERROR,FATAL,Segmentation fault
+
+# Install MrBayes...
+RUN apt-get update && apt-get install -y mrbayes
+WORKDIR /data
+CMD ["mb", "-h"]
+EOF
+
+# 3. Build image
+docker build -t bioframe-mrbayes:latest .
+
+# 4. Done! Tool automatically available in BioFrame
+```
+
+#### **Example 2: Adding a Custom Analysis Tool**
+```dockerfile
+# tools/myanalyzer/Dockerfile
+FROM python:3.9-slim
+
+# BIOFRAME_TOOL_METADATA
+# tool_name: MyCustomAnalyzer
+# tool_description: Custom genomic analysis tool for specialized research
+# tool_version: 1.0.0
+# tool_category: Custom Analysis
+# tool_input_formats: FASTQ, VCF
+# tool_output_formats: JSON, CSV
+# tool_author: Research Team
+# tool_url: https://lab.university.edu/myanalyzer
+# tool_icon: microscope
+# tool_color: purple
+# tool_commands: myanalyzer
+# tool_primary_command: myanalyzer
+# tool_command_template: myanalyzer analyze {input_files} --output {output_dir}/results.json --format json
+# tool_memory_requirement: 2g
+# tool_cpu_requirement: 1
+# tool_expected_outputs: {output_dir}/results.json
+# tool_success_indicators: Analysis complete,Results saved
+# tool_failure_indicators: Error processing,Invalid input
+
+# Install custom tool
+COPY myanalyzer.py /usr/local/bin/myanalyzer
+RUN chmod +x /usr/local/bin/myanalyzer
+WORKDIR /data
+CMD ["myanalyzer", "--help"]
+```
+
 ### **Contributing Guidelines**
 - **Code Standards**: PEP 8 compliance and comprehensive testing
 - **Documentation**: Clear docstrings and README updates
 - **Testing**: Unit and integration test coverage
 - **Review Process**: Pull request review and approval workflow
+- **🆕 Tool Integration**: Follow metadata specification for new tools
 
 ### **Architecture Principles**
+- **🤖 Dynamic Discovery**: Zero-configuration tool integration
+- **📋 Metadata-Driven**: Self-describing tool architecture
+- **🔧 Template-Based**: Flexible command generation system
 - **Modularity**: Loosely coupled, highly cohesive components
 - **Scalability**: Horizontal scaling and resource optimization
 - **Reliability**: Comprehensive error handling and recovery
@@ -458,12 +860,60 @@ docker-compose logs -f
 - **Architecture Guide**: System design and implementation details
 - **Contributing Guide**: Development setup and contribution process
 - **Testing Guide**: Testing strategies and best practices
+- **🤖 Dynamic System Guide**: Detailed metadata specification and template system
 
 ### **Community Resources**
 - **GitHub Issues**: Bug reports and feature requests
 - **Discussions**: Community forums and Q&A
 - **Examples**: Sample workflows and use cases
 - **Tutorials**: Video and written tutorials
+
+### **🔧 Dynamic System Troubleshooting**
+
+#### **Tool Not Appearing in Interface**
+```bash
+# Check if Docker image exists
+docker images | grep bioframe-mytool
+
+# Verify naming convention
+# Must be: bioframe-{toolname}:latest
+
+# Check metadata format
+docker run --rm bioframe-mytool:latest cat /dev/null
+# Should show tool help without errors
+```
+
+#### **Command Template Issues**
+```bash
+# Test template substitution manually
+# Check logs in: data/runs/{workflow_id}/logs/workflow_execution.log
+
+# Common issues:
+# - Missing placeholders: {input_file_1}, {output_dir}
+# - Shell operators: Use > | && for complex commands
+# - Path issues: Use container paths (/data/...)
+```
+
+#### **Metadata Validation**
+```bash
+# Verify metadata is properly formatted
+grep -A 20 "BIOFRAME_TOOL_METADATA" tools/mytool/Dockerfile
+
+# Required fields:
+# - tool_name, tool_primary_command, tool_command_template
+# - tool_category, tool_input_formats, tool_output_formats
+# - tool_memory_requirement, tool_cpu_requirement
+```
+
+#### **Resource Allocation Problems**
+```bash
+# Check container resource limits
+docker stats
+
+# Adjust in metadata:
+# tool_memory_requirement: 8g  # Increase memory
+# tool_cpu_requirement: 4      # Increase CPU cores
+```
 
 
 

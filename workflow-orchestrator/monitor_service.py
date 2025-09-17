@@ -48,7 +48,7 @@ class WorkflowMonitor:
                 time.sleep(10)  # Wait longer on error
     
     def _check_for_new_workflows(self):
-        """Check for new workflow trigger files"""
+        """Check for new workflow trigger files and resume stuck workflows"""
         if not self.runs_dir.exists():
             return
             
@@ -58,6 +58,9 @@ class WorkflowMonitor:
                 
             run_id = run_dir.name
             trigger_file = run_dir / "execute_workflow.trigger"
+            
+            # Check for stuck workflows that need resumption (regardless of trigger file)
+            self._check_for_stuck_workflow(run_dir, run_id)
             
             # Skip if already processed or no trigger file
             if run_id in self.processed_triggers or not trigger_file.exists():
@@ -154,6 +157,132 @@ class WorkflowMonitor:
                         yaml.dump(workflow_config, f, default_flow_style=False)
                 except:
                     pass
+        
+        # Start execution in background thread
+        thread = threading.Thread(target=execute, daemon=True)
+        thread.start()
+    
+    def _check_for_stuck_workflow(self, run_dir: Path, run_id: str):
+        """Check if a workflow is stuck and can be resumed"""
+        try:
+            workflow_file = run_dir / "workflow.yaml"
+            if not workflow_file.exists():
+                return
+                
+            with open(workflow_file, 'r') as f:
+                workflow_config = yaml.safe_load(f)
+            
+            # Only check running workflows
+            status = workflow_config.get('status')
+            if status != 'running':
+                return
+            
+            logger.info(f"🔍 Checking workflow {run_id} with status: {status}")
+            
+            # Check if this workflow has been stuck for a while and has completed steps
+            step_results_dir = run_dir / "step_results"
+            if not step_results_dir.exists():
+                return
+            
+            # Get completed steps
+            completed_steps = []
+            for step_file in step_results_dir.glob("step_*.json"):
+                try:
+                    with open(step_file, 'r') as f:
+                        step_data = json.load(f)
+                        if step_data.get('result', {}).get('success', False):
+                            completed_steps.append(step_data.get('step_number', 0))
+                except:
+                    continue
+            
+            if not completed_steps:
+                return
+            
+            # Check if we can resume this workflow
+            tools = workflow_config.get('tools', [])
+            max_completed_step = max(completed_steps) if completed_steps else 0
+            next_step = max_completed_step + 1
+            
+            # If there are more steps to execute, try to resume
+            if next_step <= len(tools):
+                logger.info(f"🔄 Found stuck workflow {run_id} - resuming from step {next_step}")
+                self._resume_workflow(run_id, workflow_config, max_completed_step)
+                
+        except Exception as e:
+            logger.error(f"❌ Error checking stuck workflow {run_id}: {e}")
+    
+    def _resume_workflow(self, run_id: str, workflow_config: dict, last_completed_step: int):
+        """Resume a stuck workflow from where it left off"""
+        try:
+            # Mark as processed to avoid duplicate resumption
+            if run_id in self.processed_triggers:
+                return
+            self.processed_triggers.add(run_id)
+            
+            # Get input files from the last completed step
+            run_dir = self.runs_dir / run_id
+            last_step_dir = run_dir / f"step_{last_completed_step}_{workflow_config['tools'][last_completed_step-1]}"
+            
+            input_files = []
+            if last_step_dir.exists():
+                # Get output files from last completed step as input for next step
+                input_files = [str(f) for f in last_step_dir.iterdir() if f.is_file()]
+            
+            if not input_files:
+                logger.warning(f"⚠️ No output files found from step {last_completed_step} for resumption")
+                return
+            
+            # Execute workflow continuation
+            self._execute_workflow_continuation(run_id, input_files, workflow_config, last_completed_step + 1)
+            
+        except Exception as e:
+            logger.error(f"❌ Error resuming workflow {run_id}: {e}")
+    
+    def _execute_workflow_continuation(self, run_id: str, input_files: list, workflow_config: dict, start_step: int):
+        """Execute workflow continuation from a specific step"""
+        import threading
+        
+        def execute():
+            try:
+                logger.info(f"🚀 Resuming workflow {run_id} from step {start_step}")
+                
+                # Create a modified workflow config for continuation
+                remaining_tools = workflow_config['tools'][start_step-1:]
+                continuation_config = workflow_config.copy()
+                continuation_config['tools'] = remaining_tools
+                continuation_config['resumed_at'] = datetime.now().isoformat()
+                continuation_config['resumed_from_step'] = start_step
+                continuation_config['original_run_id'] = run_id
+                
+                # Execute the remaining workflow
+                success = self.orchestrator.execute_pipeline_workflow_enhanced(
+                    run_id=run_id,
+                    input_files=input_files,
+                    workflow_config=continuation_config
+                )
+                
+                # Update final status
+                if success:
+                    workflow_config['status'] = 'completed'
+                    workflow_config['completed_at'] = datetime.now().isoformat()
+                    logger.info(f"✅ Workflow {run_id} resumed and completed successfully")
+                else:
+                    workflow_config['status'] = 'failed'
+                    workflow_config['failed_at'] = datetime.now().isoformat()
+                    logger.error(f"❌ Workflow {run_id} resumption failed")
+                
+                # Save final status
+                workflow_file = self.runs_dir / run_id / "workflow.yaml"
+                with open(workflow_file, 'w') as f:
+                    yaml.dump(workflow_config, f, default_flow_style=False)
+                
+                # Remove trigger file if exists
+                trigger_file = self.runs_dir / run_id / "execute_workflow.trigger"
+                if trigger_file.exists():
+                    trigger_file.unlink()
+                    
+            except Exception as e:
+                logger.error(f"❌ Error executing workflow continuation {run_id}: {e}")
         
         # Start execution in background thread
         thread = threading.Thread(target=execute, daemon=True)

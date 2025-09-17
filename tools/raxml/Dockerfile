@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: blue
 # tool_commands: raxmlHPC, raxmlHPC-PTHREADS
 # tool_primary_command: raxmlHPC-PTHREADS
-# tool_command_template: raxmlHPC-PTHREADS -s {input_files} -n {output_name} -m {model} -T {threads} {options}
+# tool_command_template: cd {output_dir} && raxmlHPC-PTHREADS -s {input_file_1} -n phylo_tree -m GTRGAMMA -T 4 -p 12345
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
