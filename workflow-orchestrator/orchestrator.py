@@ -1111,8 +1111,8 @@ class ContainerProcessManager:
                         self.logger.info(f"🏁 Container {tool_name} finished with status: {container_status}, exit_code: {exit_code}")
                         
                         # Update process returncode if we captured it
-                        if exit_code is not None and hasattr(process, '_returncode'):
-                            process._returncode = exit_code
+                        if exit_code is not None:
+                            process.returncode = exit_code
                         
                         # Clean up container now that we have the exit code
                         self._cleanup_container(container_id, tool_name)
@@ -1287,6 +1287,80 @@ class WorkflowOrchestrator:
         # Initialize issues logger
         self.issues_logger = IssuesLogger()
         
+    def _filter_files_for_tool(self, files: List[str], tool_name: str) -> List[str]:
+        """Filter files based on tool's accepted input formats"""
+        try:
+            # Get tool metadata to understand accepted input formats
+            metadata = self.container_manager._extract_tool_metadata(tool_name)
+            input_formats = metadata.get('tool_input_formats', '').upper()
+            
+            if not input_formats:
+                # If no format specification, pass all files (fallback behavior)
+                self.logger.warning(f"No input format specification for {tool_name}, passing all files")
+                return files
+            
+            # Parse accepted formats
+            accepted_formats = [fmt.strip().upper() for fmt in input_formats.split(',')]
+            self.logger.info(f"Tool {tool_name} accepts formats: {accepted_formats}")
+            
+            filtered_files = []
+            for file_path in files:
+                file_path_obj = Path(file_path)
+                file_ext = file_path_obj.suffix.upper()
+                file_name = file_path_obj.name.upper()
+                
+                # Check if file matches accepted formats
+                should_include = False
+                
+                for fmt in accepted_formats:
+                    if fmt == 'FASTA':
+                        if file_ext in ['.FASTA', '.FA', '.FAS'] or 'FASTA' in file_name:
+                            should_include = True
+                            break
+                    elif fmt == 'FASTQ':
+                        if file_ext in ['.FASTQ', '.FQ'] or 'FASTQ' in file_name:
+                            should_include = True
+                            break
+                    elif fmt == 'GFA':
+                        if file_ext == '.GFA' or 'GFA' in file_name:
+                            should_include = True
+                            break
+                    elif fmt == 'SAM':
+                        if file_ext == '.SAM' or 'SAM' in file_name:
+                            should_include = True
+                            break
+                    elif fmt == 'BAM':
+                        if file_ext == '.BAM' or 'BAM' in file_name:
+                            should_include = True
+                            break
+                    elif fmt in file_ext or fmt in file_name:
+                        should_include = True
+                        break
+                
+                if should_include:
+                    filtered_files.append(file_path)
+                    self.logger.info(f"Including file for {tool_name}: {file_path_obj.name}")
+                else:
+                    self.logger.debug(f"Excluding file for {tool_name}: {file_path_obj.name} (format not supported)")
+            
+            if not filtered_files:
+                self.logger.warning(f"No files match accepted formats for {tool_name}. Accepted: {accepted_formats}")
+                # In this case, we might want to pass the most likely candidates
+                # For now, let's pass files that look like primary outputs
+                for file_path in files:
+                    file_name = Path(file_path).name.lower()
+                    if any(keyword in file_name for keyword in ['contigs', 'scaffolds', 'assembly', 'output']):
+                        filtered_files.append(file_path)
+                        self.logger.info(f"Including likely primary output: {file_name}")
+            
+            self.logger.info(f"Filtered {len(files)} files to {len(filtered_files)} for {tool_name}")
+            return filtered_files
+            
+        except Exception as e:
+            self.logger.error(f"Error filtering files for {tool_name}: {e}")
+            # Fallback: return original files to avoid breaking workflow
+            return files
+        
     def create_sample_run(self, run_id: str, workflow_name: str, tools: List[str], 
                           input_files: List[str], output_dir: str) -> Dict[str, Any]:
         """Create a new workflow run with sample data"""
@@ -1402,13 +1476,21 @@ class WorkflowOrchestrator:
                     workflow_logger.log_step_completion(step_number, tool_name, result)
                     
                     if result.success:
-                        # Update inputs for next step
-                        current_inputs = result.output_files
-                        step_number += 1
+                        # Filter output files for next step based on next tool's requirements
+                        if step_number < len(tools):
+                            next_tool = tools[step_number]
+                            filtered_inputs = self._filter_files_for_tool(result.output_files, next_tool)
+                            current_inputs = filtered_inputs
+                            
+                            # Log filtering results
+                            workflow_logger.log_step_progress(step_number, tool_name, 
+                                f"Tool completed successfully. Output files: {len(result.output_files)}, Filtered for {next_tool}: {len(filtered_inputs)}")
+                        else:
+                            current_inputs = result.output_files
+                            workflow_logger.log_step_progress(step_number, tool_name, 
+                                f"Tool completed successfully. Output files: {len(result.output_files)}")
                         
-                        # Log progress
-                        workflow_logger.log_step_progress(step_number-1, tool_name, 
-                            f"Tool completed successfully. Output files: {len(result.output_files)}")
+                        step_number += 1
                         
                         # Log that we're ready for the next step
                         if step_number <= len(tools):

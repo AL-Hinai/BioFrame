@@ -13,8 +13,8 @@ FROM ubuntu:22.04
 # tool_color: green
 # tool_commands: spades.py
 # tool_primary_command: spades.py
-# tool_command_template: spades.py --careful --only-assembler --threads 4 --memory 8 -1 {input_file_1} -2 {input_file_2} -o {output_dir}
-# tool_memory_requirement: 8g
+# tool_command_template: spades.py --threads 4 --memory 12 -1 {input_file_1} -2 {input_file_2} -o {output_dir}
+# tool_memory_requirement: 12g
 # tool_cpu_requirement: 4
 # tool_expected_outputs: {output_dir}/contigs.fasta,{output_dir}/scaffolds.fasta
 # tool_success_indicators: SPAdes pipeline finished,Thank you for using SPAdes

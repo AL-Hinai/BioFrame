@@ -5,7 +5,7 @@ FROM ubuntu:22.04
 # tool_description: Quality assessment tool for genome assemblies
 # tool_version: 5.2.0
 # tool_category: Quality Assessment
-# tool_input_formats: FASTA, GFA
+# tool_input_formats: FASTA
 # tool_output_formats: HTML, TXT, TSV
 # tool_author: Center for Algorithmic Biotechnology
 # tool_url: https://github.com/ablab/quast
