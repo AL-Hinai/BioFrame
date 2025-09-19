@@ -14,8 +14,8 @@ FROM ubuntu:22.04
 # tool_commands: trimmomatic
 # tool_primary_command: trimmomatic
 # tool_command_template: trimmomatic PE -phred33 {input_file_1} {input_file_2} {output_dir}/trimmed_1.fastq {output_dir}/unpaired_1.fastq {output_dir}/trimmed_2.fastq {output_dir}/unpaired_2.fastq ILLUMINACLIP:/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
-# tool_memory_requirement: 4g
-# tool_cpu_requirement: 2
+# tool_memory_requirement: 
+# tool_cpu_requirement:
 # tool_expected_outputs: {output_dir}/trimmed_1.fastq,{output_dir}/trimmed_2.fastq
 # tool_success_indicators: TrimmomaticPE: Completed successfully
 # tool_failure_indicators: Exception in thread,Could not create the Java Virtual Machine

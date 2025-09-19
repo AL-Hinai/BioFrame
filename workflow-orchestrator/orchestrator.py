@@ -499,10 +499,15 @@ class ContainerProcessManager:
         cmd = ["docker", "run"]
         
         # Add resource limits (can be overridden by tool metadata)
-        memory_limit = tool_config.get('memory_requirement', '8g')
-        cpu_limit = tool_config.get('cpu_requirement', '4')
-        cmd.extend(["--memory", memory_limit])
-        cmd.extend(["--cpus", str(cpu_limit)])
+        # Set defaults to empty so tools can use unlimited resources
+        memory_limit = tool_config.get('memory_requirement', '')
+        cpu_limit = tool_config.get('cpu_requirement', '')
+        
+        # Only add limits if they are specified and not empty/unlimited
+        if memory_limit and memory_limit.strip() and memory_limit.lower() not in ['unlimited', '']:
+            cmd.extend(["--memory", memory_limit])
+        if cpu_limit and str(cpu_limit).strip() and str(cpu_limit).lower() not in ['unlimited', '']:
+            cmd.extend(["--cpus", str(cpu_limit)])
         cmd.extend(["--ulimit", "nofile=65536:65536"])  # File descriptor limit
         
         # Add environment variables
@@ -550,10 +555,10 @@ class ContainerProcessManager:
                 self.logger.warning(f"No metadata found for tool {tool_name}, falling back to basic command")
                 return [tool_name, "--help"]
             
-            # Update tool_config with resource requirements from metadata
-            if 'tool_memory_requirement' in metadata:
+            # Update tool_config with resource requirements from metadata (only if not empty)
+            if 'tool_memory_requirement' in metadata and metadata['tool_memory_requirement'].strip():
                 tool_config['memory_requirement'] = metadata['tool_memory_requirement']
-            if 'tool_cpu_requirement' in metadata:
+            if 'tool_cpu_requirement' in metadata and metadata['tool_cpu_requirement'].strip():
                 tool_config['cpu_requirement'] = metadata['tool_cpu_requirement']
             
             # Use the command template from metadata
@@ -1360,6 +1365,48 @@ class WorkflowOrchestrator:
             self.logger.error(f"Error filtering files for {tool_name}: {e}")
             # Fallback: return original files to avoid breaking workflow
             return files
+    
+    def _prepare_universal_inputs(self, tool_name: str, current_inputs: List[str], 
+                                 original_inputs: List[str], step_number: int) -> List[str]:
+        """
+        UNIVERSAL SOLUTION: Prepare inputs for tools that need both processed and reference files
+        
+        For step 1: Use all original inputs
+        For step 2+: Use processed files + reference files from original inputs
+        """
+        try:
+            if step_number == 1:
+                # First tool gets all original inputs
+                return original_inputs
+            
+            # For subsequent tools, combine processed files with reference files
+            combined_inputs = current_inputs.copy()
+            
+            # Add reference files (FASTA files that aren't FASTQ) from original inputs
+            for original_file in original_inputs:
+                file_path = Path(original_file)
+                file_ext = file_path.suffix.upper()
+                file_name = file_path.name.upper()
+                
+                # Identify reference files (FASTA, but not FASTQ)
+                is_reference = False
+                if file_ext in ['.FASTA', '.FA', '.FAS'] and file_ext not in ['.FASTQ', '.FQ']:
+                    is_reference = True
+                elif 'FASTA' in file_name and 'FASTQ' not in file_name:
+                    is_reference = True
+                elif any(keyword in file_name for keyword in ['TARGET', 'REFERENCE', 'REF', 'GENES']):
+                    is_reference = True
+                
+                # Add reference files to inputs if not already present
+                if is_reference and original_file not in combined_inputs:
+                    combined_inputs.append(original_file)
+                    self.logger.info(f"🔗 Added reference file for {tool_name}: {file_path.name}")
+            
+            return combined_inputs
+            
+        except Exception as e:
+            self.logger.error(f"Error preparing universal inputs for {tool_name}: {e}")
+            return current_inputs  # Fallback to current inputs
         
     def create_sample_run(self, run_id: str, workflow_name: str, tools: List[str], 
                           input_files: List[str], output_dir: str) -> Dict[str, Any]:
@@ -1434,6 +1481,7 @@ class WorkflowOrchestrator:
                     
             # Execute each tool in the pipeline using container manager
             current_inputs = copied_files
+            original_inputs = copied_files.copy()  # Keep original files for reference
             step_number = 1
             step_results = []
             
@@ -1443,8 +1491,11 @@ class WorkflowOrchestrator:
                     tool_output_dir = self.runs_dir / run_id / f"step_{step_number}_{tool_name}"
                     tool_output_dir.mkdir(exist_ok=True)
                     
+                    # UNIVERSAL SOLUTION: Provide both processed files and reference files
+                    tool_inputs = self._prepare_universal_inputs(tool_name, current_inputs, original_inputs, step_number)
+                    
                     # Log step start
-                    workflow_logger.log_step_start(step_number, tool_name, current_inputs, str(tool_output_dir))
+                    workflow_logger.log_step_start(step_number, tool_name, tool_inputs, str(tool_output_dir))
                     
                     # Execute tool using container manager
                     tool_config = {
@@ -1454,7 +1505,7 @@ class WorkflowOrchestrator:
                     }
                     
                     result = self.container_manager.execute_tool_in_container(
-                        tool_name, current_inputs, str(tool_output_dir), 
+                        tool_name, tool_inputs, str(tool_output_dir), 
                         run_id, step_number, tool_config
                     )
                     

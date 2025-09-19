@@ -14,8 +14,8 @@ FROM ubuntu:22.04
 # tool_commands: quast.py
 # tool_primary_command: quast.py
 # tool_command_template: quast.py --threads 4 {input_files} -o {output_dir}
-# tool_memory_requirement: 4g
-# tool_cpu_requirement: 4
+# tool_memory_requirement: 
+# tool_cpu_requirement:
 # tool_expected_outputs: {output_dir}/report.html,{output_dir}/report.txt
 # tool_success_indicators: QUAST finished,Thank you for using QUAST
 # tool_failure_indicators: ERROR,FATAL,Failed

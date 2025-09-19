@@ -240,12 +240,26 @@
                     <div class="mt-6 pt-6 border-t border-gray-200">
                         <h4 class="font-medium text-gray-900 mb-3">Expected Outputs</h4>
                         <div class="space-y-2">
-                            {% for output in template.output_formats %}
-                            <div class="flex items-center text-sm text-gray-600">
-                                <i class="fas fa-check-circle text-green-500 mr-2"></i>
-                                {{ output }}
-                            </div>
-                            {% endfor %}
+                            {% if template.output_formats %}
+                                {% if template.output_formats|length > 0 %}
+                                    {% for output in template.output_formats %}
+                                    <div class="flex items-center text-sm text-gray-600">
+                                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                        {{ output }}
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="flex items-center text-sm text-gray-600">
+                                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                        Analysis Results
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="flex items-center text-sm text-gray-600">
+                                    <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                    Analysis Results
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                     

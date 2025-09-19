@@ -1214,6 +1214,52 @@ def initialize_workflow_run(request, template_id):
                 selected_template = template
                 break
         
+        # Check if this is a single-tool workflow (passed via sessionStorage)
+        if not selected_template and template_id.startswith('single-'):
+            # Extract tool name from template_id (format: single-{toolname}-workflow)
+            tool_name = template_id.replace('single-', '').replace('-workflow', '')
+            
+            # Get tool metadata to create proper template
+            from tools.views import scan_tools_directory
+            available_tools = scan_tools_directory()
+            
+            tool_metadata = None
+            for tool in available_tools:
+                if tool.get('name', '').lower() == tool_name.lower() or tool.get('tool_id', '').lower() == tool_name.lower():
+                    tool_metadata = tool
+                    break
+            
+            if tool_metadata:
+                # Ensure output_formats is a list for template rendering
+                output_formats = tool_metadata.get('output_formats', 'Various')
+                if isinstance(output_formats, str):
+                    # Split by comma and clean up
+                    output_formats = [fmt.strip() for fmt in output_formats.split(',') if fmt.strip()]
+                    if not output_formats:
+                        output_formats = ['Various']
+                
+                # Ensure input_formats is a list for template rendering
+                input_formats = tool_metadata.get('input_formats', 'Various')
+                if isinstance(input_formats, str):
+                    # Split by comma and clean up
+                    input_formats = [fmt.strip() for fmt in input_formats.split(',') if fmt.strip()]
+                    if not input_formats:
+                        input_formats = ['Various']
+                
+                selected_template = {
+                    'id': template_id,
+                    'name': f"{tool_metadata.get('name', tool_name.title())} Single Tool Workflow",
+                    'description': f"Execute {tool_metadata.get('name', tool_name)} as a standalone workflow",
+                    'category': tool_metadata.get('category', 'Single Tool'),
+                    'tools': [tool_name],
+                    'estimated_time': '30 minutes - 2 hours',
+                    'difficulty': 'Beginner',
+                    'input_formats': input_formats,
+                    'output_formats': output_formats,
+                    'icon': 'fas fa-cog',
+                    'color': 'bg-gray-100 text-gray-800'
+                }
+        
         # If not found in pre-created templates, try to find a custom workflow
         if not selected_template:
             try:
@@ -1616,8 +1662,15 @@ def validate_and_start_workflow(request, run_id):
                     file_info = json.load(f)
                     template_id = file_info.get('template_id')
                     
-                    # Load template from workflow_templates directory
-                    if template_id:
+                    # Handle single-tool workflows
+                    if template_id and template_id.startswith('single-'):
+                        # Extract tool name from template_id (format: single-{toolname}-workflow)
+                        tool_name = template_id.replace('single-', '').replace('-workflow', '')
+                        template_tools = [tool_name]
+                        template_name = f"{tool_name.title()} Single Tool Workflow"
+                        print(f"✅ Single-tool workflow detected: {tool_name}")
+                    elif template_id:
+                        # Load template from workflow_templates directory for multi-tool workflows
                         template_path = Path(f"/app/data/workflows/{template_id}.json")
                         if template_path.exists():
                             with open(template_path, 'r') as f:

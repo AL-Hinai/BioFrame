@@ -50,7 +50,12 @@ BioFrame represents a significant contribution to the field of bioinformatics, c
 - **Solution**: Per-tool resource specification in metadata
 - **Impact**: Optimal resource utilization and better performance
 
-#### **4. Intelligent Error Detection and Recovery**
+#### **4. Universal Reference File Handling**
+- **Problem Solved**: Tools needing both processed files and original reference files
+- **Solution**: Intelligent input preparation that combines processed outputs with reference files
+- **Impact**: Seamless handling of complex phylogenomics and multi-input workflows
+
+#### **5. Intelligent Error Detection and Recovery**
 - **Problem Solved**: Generic error handling without tool-specific knowledge
 - **Solution**: Tool-defined success/failure indicators in metadata
 - **Impact**: Precise error diagnosis and targeted recovery suggestions
@@ -180,6 +185,17 @@ def _build_command_from_template(self, tool_name: str, metadata: Dict[str, str],
     # Uses tool_command_template from metadata
     # Substitutes placeholders with actual values
     # Handles complex shell commands automatically
+```
+
+#### **4. Universal Reference File Handling**
+```python
+# Intelligent input preparation for complex workflows
+def _prepare_universal_inputs(self, tool_name: str, current_inputs: List[str], 
+                             original_inputs: List[str], step_number: int) -> List[str]:
+    """UNIVERSAL SOLUTION: Prepare inputs for tools that need both processed and reference files"""
+    # Step 1: Use all original inputs
+    # Step 2+: Combine processed files with reference files from original inputs
+    # Automatically detects reference files (FASTA, TARGET, REFERENCE, etc.)
 ```
 
 ### **📋 Complete Metadata Specification**
@@ -381,6 +397,43 @@ tool_url                # → Help links
 # tool_command_template: cd {output_dir} && mytool preprocess {input_file_1} && mytool analyze processed.data && mytool report analysis.result
 ```
 
+### **🔗 Universal Reference File Handling**
+
+#### **The Challenge:**
+Many bioinformatics tools need **both processed files from previous steps AND original reference files**:
+- **Phylogenomics**: HybPiper needs trimmed FASTQ + target genes FASTA
+- **Variant Calling**: GATK needs aligned BAM + reference genome
+- **Annotation**: Tools need assemblies + reference databases
+
+#### **BioFrame's Universal Solution:**
+```python
+# Automatic reference file detection
+def _prepare_universal_inputs(tool_name, current_inputs, original_inputs, step_number):
+    """
+    Step 1: Tool gets ALL original uploaded files
+    Step 2+: Tool gets processed files + reference files from original uploads
+    """
+    # Smart detection of reference files:
+    # - File extensions: .fasta, .fa, .fas (but NOT .fastq)
+    # - File names: Contains "FASTA" but not "FASTQ"
+    # - Keywords: "TARGET", "REFERENCE", "REF", "GENES"
+```
+
+#### **Example Workflow:**
+```bash
+# Upload: [sample_R1.fastq, sample_R2.fastq, target_genes.fasta]
+
+# Step 1: Trimmomatic
+Input: [R1.fastq, R2.fastq, target_genes.fasta]  # All original files
+Process: Only FASTQ files (automatic filtering)
+Output: [trimmed_R1.fastq, trimmed_R2.fastq]
+
+# Step 2: HybPiper (Universal Logic)
+Input: [trimmed_R1.fastq, trimmed_R2.fastq] + [target_genes.fasta]  # Processed + Reference
+Process: All files
+Output: [recovered_genes.fasta]
+```
+
 ### **✅ Validation and Quality Assurance**
 
 #### **Automatic Validation:**
@@ -388,6 +441,7 @@ tool_url                # → Help links
 - **Resource Validation**: Ensures adequate memory/CPU available
 - **Output Detection**: Monitors for `tool_expected_outputs`
 - **Success/Failure Detection**: Uses `tool_success_indicators` and `tool_failure_indicators`
+- **Reference File Detection**: Automatically identifies and preserves reference files
 
 #### **Error Recovery:**
 - **Detailed Error Logs**: Captures all tool output and errors

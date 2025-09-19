@@ -13,12 +13,12 @@ FROM ubuntu:22.04
 # tool_color: orange
 # tool_commands: hybpiper, hybpiper_stats
 # tool_primary_command: hybpiper
-# tool_command_template: hybpiper assemble -r {input_files} -t_aa {target_genes} -o {output_dir} {options}
+# tool_command_template: hybpiper assemble -r {input_file_1} {input_file_2} -t_aa {input_file_3} --prefix sample --cpu 4 --outdir {output_dir}
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install system dependencies including PERL (REQUIRED for HybPiper)
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -36,9 +36,13 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     git \
+    perl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Create python symlink for compatibility
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Install Python dependencies (complete HybPiper requirements)
 RUN pip3 install \
     numpy \
     pandas \
@@ -46,19 +50,29 @@ RUN pip3 install \
     seaborn \
     biopython \
     scipy \
-    networkx
+    networkx \
+    pebble \
+    psutil \
+    progressbar2 \
+    configparser
 
-# Install BLAST+ (required by HybPiper)
-RUN wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.14.0+-x64-linux.tar.gz \
-    && tar -xzf ncbi-blast-2.14.0+-x64-linux.tar.gz \
-    && cp ncbi-blast-2.14.0+/bin/* /usr/local/bin/ \
-    && chmod +x /usr/local/bin/* \
-    && rm -rf ncbi-blast-2.14.0+-x64-linux.tar.gz ncbi-blast-2.14.0+
+# Install BLAST+ (required by HybPiper) - using apt package
+RUN apt-get update && apt-get install -y \
+    ncbi-blast+ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install seqtk (REQUIRED dependency for HybPiper)
+RUN git clone https://github.com/lh3/seqtk.git /opt/seqtk \
+    && cd /opt/seqtk \
+    && make \
+    && cp seqtk /usr/local/bin/ \
+    && chmod +x /usr/local/bin/seqtk
 
 # Install HybPiper
 RUN git clone https://github.com/mossmatters/HybPiper.git /opt/hybpiper \
     && cd /opt/hybpiper \
     && pip3 install -e . \
+    && rm -f /usr/local/bin/hybpiper \
     && ln -s /opt/hybpiper/hybpiper/assemble.py /usr/local/bin/hybpiper \
     && ln -s /opt/hybpiper/hybpiper/hybpiper_stats.py /usr/local/bin/hybpiper_stats
 

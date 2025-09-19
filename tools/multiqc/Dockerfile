@@ -14,8 +14,8 @@ FROM ubuntu:22.04
 # tool_commands: multiqc
 # tool_primary_command: multiqc
 # tool_command_template: multiqc /data -o {output_dir} --force
-# tool_memory_requirement: 2g
-# tool_cpu_requirement: 1
+# tool_memory_requirement: 
+# tool_cpu_requirement:
 # tool_expected_outputs: {output_dir}/multiqc_report.html
 # tool_success_indicators: MultiQC complete,Report written
 # tool_failure_indicators: ERROR,CRITICAL,Failed

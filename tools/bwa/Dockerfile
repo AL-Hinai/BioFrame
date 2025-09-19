@@ -13,7 +13,7 @@ FROM ubuntu:22.04
 # tool_color: blue
 # tool_commands: bwa,index,mem,aln,samse,sampe,bwasw,bwtsw
 # tool_primary_command: bwa
-# tool_command_template: bwa mem -t 4 {input_file_1} {input_file_2} > {output_dir}/alignment.sam
+# tool_command_template: bwa index {reference} && bwa mem -t 4 {reference} {input_file_1} {input_file_2} > {output_dir}/alignment.sam
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

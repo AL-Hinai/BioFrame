@@ -219,8 +219,49 @@ function useInWorkflow(toolName) {
 }
 
 function executeTool() {
-    // Placeholder for tool execution
-    alert('Tool execution functionality will be implemented here');
+    // Get the current tool name from the modal title
+    const toolName = document.getElementById('modalTitle').textContent.toLowerCase();
+    
+    // Get tool data from the modal content to extract proper output formats
+    const modalContent = document.getElementById('modalContent').textContent;
+    
+    // Try to extract output formats from the tool data displayed in modal
+    let outputFormats = ['Analysis Results', 'Log Files'];
+    
+    // Define specific output formats for common tools
+    const toolOutputFormats = {
+        'fastqc': ['HTML Reports', 'QC Statistics', 'Summary Files'],
+        'trimmomatic': ['Trimmed FASTQ Files', 'QC Reports', 'Log Files'],
+        'spades': ['FASTA Assembly', 'GFA Graph', 'Assembly Statistics'],
+        'quast': ['HTML Report', 'Statistics Files', 'Comparison Results'],
+        'bwa': ['SAM File', 'Alignment Statistics', 'Log Files'],
+        'samtools': ['BAM File', 'Statistics', 'Index Files'],
+        'gatk': ['VCF File', 'Variant Reports', 'Log Files'],
+        'multiqc': ['HTML Report', 'Data Files', 'Summary Statistics']
+    };
+    
+    if (toolOutputFormats[toolName]) {
+        outputFormats = toolOutputFormats[toolName];
+    }
+    
+    // Create a single-tool workflow template and redirect to initialize workflow run
+    const singleToolTemplate = {
+        id: `single-${toolName}-workflow`,
+        name: `${toolName.charAt(0).toUpperCase() + toolName.slice(1)} Single Tool Workflow`,
+        description: `Execute ${toolName} as a standalone workflow`,
+        category: 'Single Tool',
+        tools: [toolName],
+        estimated_time: '30 minutes - 2 hours',
+        difficulty: 'Beginner',
+        input_formats: ['Various Input Files'],
+        output_formats: outputFormats,
+        icon: 'fas fa-cog',
+        color: 'bg-gray-100 text-gray-800'
+    };
+    
+    // Store the template temporarily and redirect to initialize workflow run
+    sessionStorage.setItem('singleToolTemplate', JSON.stringify(singleToolTemplate));
+    window.location.href = `/initialize-workflow/${singleToolTemplate.id}/`;
 }
 </script>
 {% endblock %}

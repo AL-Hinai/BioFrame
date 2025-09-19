@@ -2,18 +2,23 @@ FROM ubuntu:22.04
 
 # BIOFRAME_TOOL_METADATA
 # tool_name: Exonerate
-# tool_description: Generic pairwise sequence alignment algorithm
+# tool_description: Generic tool for pairwise sequence alignment and gene structure annotation
 # tool_version: 2.4.0
-# tool_category: Sequence Alignment
+# tool_category: Gene Recovery
 # tool_input_formats: FASTA, FASTQ
-# tool_output_formats: FASTA, ALN, GFF
-# tool_author: Guy Slater
-# tool_url: http://www.ebi.ac.uk/about/vertebrate-genomics/software/exonerate
-# tool_icon: align-center
-# tool_color: indigo
+# tool_output_formats: GFF, EXN, FASTA, TXT
+# tool_author: Guy St.C. Slater
+# tool_url: https://github.com/nathanweeks/exonerate
+# tool_icon: search
+# tool_color: orange
 # tool_commands: exonerate
 # tool_primary_command: exonerate
-# tool_command_template: exonerate {query} {target} {options} > {output_file}
+# tool_command_template: exonerate --model est2genome --query {input_file_1} --target {input_file_2} --showcigar no --showvulgar no --showalignment yes --minintron 20 --maxintron 2000 > {output_dir}/gene_annotation.exn
+# tool_memory_requirement: 
+# tool_cpu_requirement:
+# tool_expected_outputs: {output_dir}/gene_annotation.exn
+# tool_success_indicators: completed exonerate analysis,# Alignment
+# tool_failure_indicators: ERROR,FATAL,Segmentation fault,Cannot allocate memory
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -32,14 +37,41 @@ RUN apt-get update && apt-get install -y \
     liblzma-dev \
     libcurl4-gnutls-dev \
     libssl-dev \
+    pkg-config \
+    git \
+    autotools-dev \
+    autoconf \
+    automake \
+    libglib2.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Exonerate
-RUN wget http://www.ebi.ac.uk/about/vertebrate-genomics/software/exonerate/exonerate-2.4.0-x86_64.tar.gz \
-    && tar -xzf exonerate-2.4.0-x86_64.tar.gz \
-    && cp exonerate-2.4.0-x86_64/bin/* /usr/local/bin/ \
-    && chmod +x /usr/local/bin/* \
-    && rm -rf exonerate-2.4.0-x86_64.tar.gz exonerate-2.4.0-x86_64
+# Install Exonerate v2.4.0
+RUN wget https://github.com/nathanweeks/exonerate/archive/v2.4.0.tar.gz \
+    && tar -xzf v2.4.0.tar.gz \
+    && cd exonerate-2.4.0 \
+    && autoreconf -fi \
+    && ./configure --prefix=/usr/local \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf v2.4.0.tar.gz exonerate-2.4.0
+
+# Verify installation (exonerate --version returns exit code 1, but it works)
+# RUN exonerate --version
+
+# Install additional bioinformatics tools for phylogenomics
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install \
+    numpy \
+    pandas \
+    matplotlib \
+    seaborn \
+    biopython \
+    scipy
 
 # Create working directories
 RUN mkdir -p /data /logs /output
